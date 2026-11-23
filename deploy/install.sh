@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Almanac installer for a Linux server with Docker (tested on Ubuntu).
 #
-#   curl -fsSL https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/install.sh -o install-almanac.sh
+#   curl -fsSL https://raw.githubusercontent.com/daskaputtja/Almanac/main/deploy/install.sh -o install-almanac.sh
 #   sudo bash install-almanac.sh
 #
 # It asks a few questions, then:
@@ -18,7 +18,7 @@ set -euo pipefail
 
 INSTALL_DIR=/opt/almanac
 IMAGE=ghcr.io/daskaputtja/almanac:latest
-REPO=https://github.com/daskaputtja/almanac.git
+REPO=https://github.com/daskaputtja/Almanac.git
 
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 info() { printf '  %s\n' "$*"; }
@@ -197,7 +197,7 @@ bold "Setting up updates"
 if [ -f "$INSTALL_DIR/src/deploy/update.sh" ]; then
   install -m 755 "$INSTALL_DIR/src/deploy/update.sh" /usr/local/bin/almanac-update
 else
-  curl -fsSL https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/update.sh -o /usr/local/bin/almanac-update
+  curl -fsSL https://raw.githubusercontent.com/daskaputtja/Almanac/main/deploy/update.sh -o /usr/local/bin/almanac-update
   chmod 755 /usr/local/bin/almanac-update
 fi
 ok "Update any time with: sudo almanac-update"

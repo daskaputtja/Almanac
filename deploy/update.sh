@@ -8,7 +8,7 @@
 set -euo pipefail
 
 INSTALL_DIR=${ALMANAC_DIR:-/opt/almanac}
-SELF_URL=https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/update.sh
+SELF_URL=https://raw.githubusercontent.com/daskaputtja/Almanac/main/deploy/update.sh
 QUIET=false
 [ "${1:-}" = "--quiet" ] && QUIET=true
 
@@ -26,7 +26,7 @@ before=$(running_image)
 if grep -q '^ALMANAC_IMAGE=almanac:local' .env 2>/dev/null; then
   # Built on this server (the published image wasn't downloadable when it was installed).
   say "Fetching the latest code…"
-  [ -d src/.git ] || git clone -q --depth 1 https://github.com/daskaputtja/almanac.git src
+  [ -d src/.git ] || git clone -q --depth 1 https://github.com/daskaputtja/Almanac.git src
   git -C src fetch -q --depth 1 origin main
   if [ "$(git -C src rev-parse HEAD)" = "$(git -C src rev-parse FETCH_HEAD)" ] && [ -n "$before" ]; then
     say "Already up to date."

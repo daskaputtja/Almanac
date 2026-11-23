@@ -114,7 +114,7 @@ Silo server ──REST API──▶ Almanac server       │──live updates�
 **The quick way**, on a Linux server (it installs Docker if needed, sets up HTTPS, and keeps your data on re-runs):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/install.sh -o install-almanac.sh
+curl -fsSL https://raw.githubusercontent.com/daskaputtja/Almanac/main/deploy/install.sh -o install-almanac.sh
 sudo bash install-almanac.sh
 ```
 
