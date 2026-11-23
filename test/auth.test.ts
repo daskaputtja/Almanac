@@ -15,6 +15,7 @@ import { ServerOverviewService } from '../server/server/overview.js';
 import { RecapService } from '../server/recap/recap.js';
 import { LoadHistory } from '../server/load/load.js';
 import { TranscodeDoctor } from '../server/transcodes/doctor.js';
+import { TrendingService } from '../server/trending/trending.js';
 import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
@@ -108,6 +109,7 @@ function makeApp() {
       recap: new RecapService(db),
       load: new LoadHistory(db, new MockServerSource(), () => {}),
       transcodes: new TranscodeDoctor(db),
+      trending: new TrendingService(db),
     },
   );
   return { app, auth, db, history, monitor };

@@ -14,6 +14,7 @@ import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
+import { TrendingService } from './trending/trending.js';
 import { StatsService } from './stats/stats.js';
 import { UsersService } from './users/users.js';
 import { ModerationService } from './moderation/service.js';
@@ -108,7 +109,7 @@ monitor.subscribe((snapshot) => {
 
 const recap = new RecapService(db);
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db) });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

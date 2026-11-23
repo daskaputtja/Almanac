@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { LibrariesResponse, LibrarySummary, RecentlyAddedItem, RecentlyAddedResponse } from '../../../shared/library';
+import { TrendingSection } from '../components/TrendingSection';
 import { formatWhen } from '../lib/format';
 import { navigate, useLocation } from '../lib/router';
 
@@ -92,6 +93,8 @@ export function LibrariesPage() {
           {error ? `Couldn’t load libraries: ${error}` : `Sync problem: ${data?.status.lastError}`}
         </div>
       )}
+
+      <TrendingSection />
 
       {data && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">

@@ -20,6 +20,7 @@ import { type Actor, ModerationError, type ModerationService } from './moderatio
 import type { ServerOverviewService } from './server/overview.js';
 import type { LoadHistory } from './load/load.js';
 import type { TranscodeDoctor } from './transcodes/doctor.js';
+import type { TrendingService } from './trending/trending.js';
 import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
 import type { StatsService } from './stats/stats.js';
@@ -38,6 +39,7 @@ export interface AppServices {
   recap: RecapService;
   load: LoadHistory;
   transcodes: TranscodeDoctor;
+  trending: TrendingService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -100,7 +102,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -204,6 +206,7 @@ export function createApp(
   });
 
   app.get('/api/libraries', (c) => c.json(library.libraries()));
+  app.get('/api/trending', (c) => c.json(trending.get()));
   app.get('/api/libraries/recent', (c) => {
     const q = c.req.query();
     const days = Number(q.days);
