@@ -24,6 +24,7 @@ import type { TrendingService } from './trending/trending.js';
 import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
 import { ShareError, type RecapShares } from './recap/shares.js';
+import type { GeoService } from './geo/geo.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -42,6 +43,7 @@ export interface AppServices {
   transcodes: TranscodeDoctor;
   trending: TrendingService;
   shares: RecapShares;
+  geo: GeoService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -104,7 +106,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -229,6 +231,11 @@ export function createApp(
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
   app.get('/api/history/status', (c) => c.json(historySync.status()));
   app.get('/api/stats', (c) => c.json(stats.get(parseStatsQuery(c.req.query()))));
+  // Countries for everyone; cities (close to exact locations) for admins only.
+  app.get('/api/stats/map', (c) => {
+    const q = parseStatsQuery(c.req.query());
+    return c.json(geo.map({ from: q.from, userId: q.userId, minWatchedSeconds: q.minWatchedSeconds }, seesIps(c)));
+  });
 
   app.get('/api/users', (c) => c.json({ users: users.list() }));
   app.get('/api/users/:id', (c) => {

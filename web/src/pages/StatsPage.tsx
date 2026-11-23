@@ -12,6 +12,7 @@ import {
   useStats,
 } from '../components/StatsSections';
 import { TopList } from '../components/TopList';
+import { WhereSection } from '../components/WhereSection';
 import { platformLabel } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
 
@@ -126,6 +127,8 @@ export function StatsPage() {
               linkTo={(e) => `/users/${encodeURIComponent(e.key)}`}
             />
           </div>
+
+          <WhereSection period={filters.period} userId={filters.user || null} />
 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <TopList title="Top shows" entries={data.top.shows} rankBy={filters.rankBy} />

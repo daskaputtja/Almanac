@@ -17,6 +17,8 @@ import { LoadHistory } from '../server/load/load.js';
 import { TranscodeDoctor } from '../server/transcodes/doctor.js';
 import { TrendingService } from '../server/trending/trending.js';
 import { RecapShares } from '../server/recap/shares.js';
+import { GeoService } from '../server/geo/geo.js';
+import { tmpdir } from 'node:os';
 import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
@@ -112,6 +114,7 @@ function makeApp() {
       transcodes: new TranscodeDoctor(db),
       trending: new TrendingService(db),
       shares: new RecapShares(db, new RecapService(db)),
+      geo: new GeoService(db, tmpdir(), () => {}),
     },
   );
   return { app, auth, db, history, monitor };
@@ -490,6 +493,13 @@ describe('roles', () => {
     expect((await mod.post(`/api/recap/shares/${list[0]!.id}/revoke`)).status).toBe(200);
     expect((await visitor.get(`/api/public/recap/${path.slice(3)}`)).status).toBe(404);
     expect((await visitor.get('/api/public/recap/not-a-real-token-at-all')).status).toBe(404);
+  });
+
+  it('shows cities on the map to admins only', async () => {
+    const { admin, mod } = await withMod();
+    expect((await mod.get('/api/stats/map')).status).toBe(200);
+    expect((await mod.get('/api/stats/map')).json!.cities).toEqual([]);
+    expect((await admin.get('/api/stats/map')).status).toBe(200);
   });
 
   it('keeps account management for admins', async () => {

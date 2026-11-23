@@ -42,6 +42,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - A heatmap of when people press play, by day of the week and hour, in your time zone
 - Top shows, movies, users, platforms and players, ranked by plays or by watch time
 - For the last 7, 30 or 90 days, the last year or all time, for everyone or one user
+- **Viewer map:** which countries people watch from, and (admins only) which cities. Looked up on your own server with a free copy of DB-IP's database, so no addresses are sent anywhere
 
 ### Users ✅
 - Every account, combining Silo's details (role, enabled, member since, last active) with plays, watch time, last watched, top platform and direct-play share
@@ -49,6 +50,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - A page for each user: what they're watching now, their charts and top titles, recent plays, and the players, IP addresses and profiles they use
 
 ### Libraries ✅
+- **Trending:** what's rising this week, the most-watched titles by viewers, and shows people are bingeing right now
 - Every library with its movie or show count, items added this week and plays in the last 30 days
 - A poster grid of recently added movies and shows, with new episodes grouped by show and 4K and HDR badges
 - Filter by library, movies or shows, and the last 7 or 30 days
@@ -72,6 +74,12 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - Fun facts: biggest binge, longest sitting, longest daily streak, busiest day, favourite device, first play of the year
 - How a user compares with everyone else that year, and the server's biggest viewers and titles added
 - Open it from the Statistics page or any user's page
+- **Share links:** admins and mods can make a link that shows one recap to anyone, without signing in, and turn it off at any time. Shared recaps leave out usernames of other viewers and server details
+
+### Server ✅
+- **Load:** streams and bandwidth over the last day, week, month, 3 months or year, with peaks, and a heatmap of a typical week so you can plan maintenance in the quiet hours
+- **Nodes:** each Silo node with its status, version, streams and bandwidth
+- **Transcode doctor:** why streams are being converted, which players and files cause it most, and suggestions for fixing it
 
 ### Later
 - Notifications to Discord and other services
@@ -151,6 +159,7 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | `SILO_URL` | Yes | | Your Silo server's address, e.g. `https://silo.example.com` |
 | `SILO_API_KEY` | Yes | | The API key from step 1 |
 | `TRUST_PROXY` | No | `false` | Set to `true` behind a reverse proxy, so Almanac sees visitors' real IP addresses and HTTPS |
+| `GEOLOCATION` | No | `on` | Set to `off` to turn off the viewer map. When on, Almanac downloads DB-IP's free city database (about 130 MB) once a month |
 | `SECURE_COOKIES` | No | `auto` | `auto` marks the sign-in cookie HTTPS-only when the request came over HTTPS; or `always` / `never` |
 | `ALMANAC_USERNAME` | No | | Creates the first account on startup instead of using the setup page. You still set up 2FA at first sign-in |
 | `ALMANAC_PASSWORD` | No | | The password for that account |
@@ -231,7 +240,11 @@ server/            The Almanac server (Hono on Node.js)
   activity/        Turning Silo sessions into Almanac's activity view
   history/         Storing play history and syncing it from Silo
   stats/           Statistics calculated from the play history
-  recap/           The yearly recap
+  recap/           The yearly recap and share links
+  load/            Server load history
+  transcodes/      The transcode doctor
+  trending/        Trending titles
+  geo/             Looking up where viewers are
   users/           Accounts combined with their play history
   library/         Copying Silo's catalog and the Libraries page's queries
   auth/            Accounts, passwords, two-factor codes, sessions and sign-in routes
@@ -261,6 +274,8 @@ Database changes go in `server/db/database.ts` as a new numbered migration. Neve
 The project is just getting started. Issues and ideas are welcome.
 
 ## Licence
+
+The viewer map uses [IP to City Lite](https://db-ip.com) by DB-IP, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 [GNU Affero General Public License v3.0](LICENSE)
 

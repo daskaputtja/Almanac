@@ -13,6 +13,8 @@ export interface Config {
   /** Creates the first Almanac account on startup if there are none yet. */
   bootstrapUser: { username: string; password: string } | null;
   trustProxy: boolean;
+  /** Look up where viewers are with a local copy of DB-IP's free database. */
+  geolocation: boolean;
   secureCookies: 'auto' | 'always' | 'never';
   webRoot: string;
 }
@@ -72,6 +74,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databasePath: join(env.DATA_DIR ?? 'data', mock ? 'almanac-demo.db' : 'almanac.db'),
     bootstrapUser: username ? { username, password } : null,
     trustProxy: bool(env.TRUST_PROXY),
+    geolocation: !['0', 'false', 'no', 'off'].includes((env.GEOLOCATION ?? 'on').trim().toLowerCase()),
     secureCookies: secureCookies as Config['secureCookies'],
     webRoot: env.ALMANAC_WEB_ROOT ?? 'dist/web',
   };

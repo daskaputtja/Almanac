@@ -253,6 +253,17 @@ const MIGRATIONS: string[] = [
     );
     CREATE INDEX recap_shares_user ON recap_shares (user_id, year);
   `,
+  /* 13: where viewers' IP addresses are, looked up locally */ `
+    CREATE TABLE ip_locations (
+      ip           TEXT PRIMARY KEY,
+      country_code TEXT,           -- 'LAN' for private addresses, NULL if unknown
+      region       TEXT,
+      city         TEXT,
+      latitude     REAL,
+      longitude    REAL,
+      looked_up_at TEXT NOT NULL
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;

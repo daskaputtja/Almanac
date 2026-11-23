@@ -13,6 +13,8 @@ import { MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSour
 import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
 import { RecapShares } from './recap/shares.js';
+import { GeoService } from './geo/geo.js';
+import { dirname } from 'node:path';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
 import { TrendingService } from './trending/trending.js';
@@ -110,7 +112,11 @@ monitor.subscribe((snapshot) => {
 
 const recap = new RecapService(db);
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap) });
+// Where viewers watch from: a local copy of DB-IP's free database (GEOLOCATION=off to disable).
+const geo = new GeoService(db, dirname(config.databasePath));
+if (config.geolocation) geo.start();
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -130,6 +136,7 @@ function shutdown() {
   clearInterval(moderationTimer);
   overview.stop();
   load.stop();
+  geo.stop();
   server.close(() => {
     db.close();
     process.exit(0);

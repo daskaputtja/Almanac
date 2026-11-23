@@ -17,6 +17,7 @@ import {
   useStats,
 } from '../components/StatsSections';
 import { NotesAndTags } from '../components/NotesAndTags';
+import { WhereSection } from '../components/WhereSection';
 import { TopList } from '../components/TopList';
 import { UserTags } from '../components/UserTags';
 import { episodeCode, formatDuration, formatFullDate, formatWhen, livePosition, platformLabel } from '../lib/format';
@@ -149,6 +150,8 @@ export function UserPage({ userId }: { userId: string }) {
           </div>
         </div>
       )}
+
+      <WhereSection period={period} userId={userId} title="Where they watch" />
 
       <section className="rounded-xl border border-line bg-panel">
         <div className="flex items-center justify-between px-4 pt-4">
