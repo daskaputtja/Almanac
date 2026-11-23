@@ -134,6 +134,19 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 > [!IMPORTANT]
 > Almanac shows usernames and IP addresses. If it can be reached from the internet, put it behind HTTPS (for example your existing reverse proxy) and set `TRUST_PROXY=true`.
 
+## Accounts and roles
+
+| | Admin | Mod |
+|---|---|---|
+| Activity, History, Statistics, Users, Libraries | ✅ | ✅ |
+| Viewers' IP addresses (and searching by IP) | ✅ | ❌ |
+| Notification settings (Discord and others) | ✅ | ❌ |
+| Add, change and remove accounts | ✅ | ❌ |
+
+The first account is an admin. Admins manage accounts in **Settings → Accounts**: add an account with a starting password and a role, change roles, reset someone's 2FA or password, or delete an account. Every change needs the admin's own 2FA code. New accounts set up their own 2FA at first sign-in. Almanac won't let you delete or demote the last admin.
+
+For mods, IP addresses are removed on the server before anything is sent, so they can't be found in the page or the API.
+
 ## Security
 
 - **Sign-in needs two things:** a password and a 6-digit code from an authenticator app (TOTP, RFC 6238). Two-factor authentication can't be turned off.
@@ -154,6 +167,7 @@ Use the recovery tool inside the container:
 docker exec -it almanac almanac-cli users                    # list accounts
 docker exec -it almanac almanac-cli reset-2fa <username>     # set up 2FA again at next sign-in
 docker exec -it almanac almanac-cli reset-password <username>
+docker exec -it almanac almanac-cli set-role <username> admin   # or mod
 ```
 
 Both resets sign the account out everywhere. Outside Docker, use `npm run cli -- <command>`.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ROLE_LABELS } from '../../shared/permissions';
 import { useAuth } from './auth/AuthGate';
 import { ActivityPage } from './pages/ActivityPage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -113,6 +114,9 @@ function UserMenu() {
       </button>
       {open && (
         <div role="menu" className="absolute right-0 top-full z-20 mt-1 w-52 overflow-hidden rounded-lg border border-line bg-panel-raised py-1 text-sm shadow-lg">
+          <p className="border-b border-line px-3 pb-2 pt-1.5 text-xs text-ink-faint">
+            {state.user?.username} · {state.role ? ROLE_LABELS[state.role] : ''}
+          </p>
           <Link to="/settings" role="menuitem" onClick={() => setOpen(false)} className="block px-3 py-2 hover:bg-panel">
             Settings
             {lowOnCodes && <span className="block text-xs text-harvest">Running low on recovery codes</span>}

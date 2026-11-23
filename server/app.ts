@@ -5,7 +5,10 @@ import { streamSSE } from 'hono/streaming';
 import type { HistoryQuery, HistorySort } from '../shared/history.js';
 import type { PlayMethod } from '../shared/activity.js';
 import type { ActivityMonitor } from './activity/monitor.js';
-import { createAuth } from './auth/routes.js';
+import type { ActivitySnapshot } from '../shared/activity.js';
+import { can } from '../shared/permissions.js';
+import type { UserDetail } from '../shared/users.js';
+import { type AuthEnv, createAuth } from './auth/routes.js';
 import type { AuthService } from './auth/service.js';
 import type { Config } from './config.js';
 import type { StatsQuery } from '../shared/stats.js';
@@ -74,11 +77,20 @@ export function parseStatsQuery(params: Record<string, string | undefined>): Sta
   };
 }
 
+/** A copy of the activity snapshot without viewers' IP addresses. */
+export function withoutIps(snapshot: ActivitySnapshot): ActivitySnapshot {
+  return { ...snapshot, streams: snapshot.streams.map((s) => ({ ...s, client: { ...s.client, ip: null } })) };
+}
+
+function userWithoutIps(user: UserDetail): UserDetail {
+  return { ...user, addresses: [] };
+}
+
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
   { auth, monitor, history, historySync, stats, users, library }: AppServices,
 ) {
-  const app = new Hono();
+  const app = new Hono<AuthEnv>();
 
   app.use(
     '*',
@@ -113,7 +125,10 @@ export function createApp(
   app.route('/api/auth', authRoutes);
   app.use('/api/*', requireSession);
 
-  app.get('/api/activity', (c) => c.json(monitor.current()));
+  // Mods don't see viewers' IP addresses; they're removed before anything is sent.
+  const seesIps = (c: { get: (key: 'session') => AuthEnv['Variables']['session'] }) => can(c.get('session').user.role, 'viewIpAddresses');
+
+  app.get('/api/activity', (c) => c.json(seesIps(c) ? monitor.current() : withoutIps(monitor.current())));
 
   app.get('/api/activity/stream', (c) =>
     streamSSE(c, async (stream) => {
@@ -121,8 +136,10 @@ export function createApp(
       const send = (snapshot: ReturnType<ActivityMonitor['current']>) =>
         stream.writeSSE({ event: 'activity', id: String(id++), data: JSON.stringify(snapshot) });
 
-      await send(monitor.current());
-      const unsubscribe = monitor.subscribe((snapshot) => void send(snapshot).catch(() => {}));
+      const ips = seesIps(c);
+      const view = (snapshot: ActivitySnapshot) => (ips ? snapshot : withoutIps(snapshot));
+      await send(view(monitor.current()));
+      const unsubscribe = monitor.subscribe((snapshot) => void send(view(snapshot)).catch(() => {}));
 
       // Keep the connection alive through proxies that close idle streams.
       while (!stream.aborted && !stream.closed) {
@@ -133,7 +150,7 @@ export function createApp(
     }),
   );
 
-  app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()))));
+  app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()), { includeIp: seesIps(c) })));
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
   app.get('/api/history/status', (c) => c.json(historySync.status()));
   app.get('/api/stats', (c) => c.json(stats.get(parseStatsQuery(c.req.query()))));
@@ -141,7 +158,8 @@ export function createApp(
   app.get('/api/users', (c) => c.json({ users: users.list() }));
   app.get('/api/users/:id', (c) => {
     const user = users.get(c.req.param('id'));
-    return user ? c.json(user) : c.json({ error: 'No such user' }, 404);
+    if (!user) return c.json({ error: 'No such user' }, 404);
+    return c.json(seesIps(c) ? user : userWithoutIps(user));
   });
 
   app.get('/api/libraries', (c) => c.json(library.libraries()));

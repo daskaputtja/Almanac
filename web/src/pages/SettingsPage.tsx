@@ -1,6 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthGate';
 import { RecoveryCodes } from '../auth/AuthScreens';
+import { ROLE_LABELS } from '../../../shared/permissions';
+import { AccountsSection } from '../components/AccountsSection';
 import { ApiError, api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 
@@ -14,13 +16,17 @@ interface SessionInfo {
 }
 
 export function SettingsPage() {
-  const { state, refresh } = useAuth();
+  const { state, refresh, can } = useAuth();
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Settings</h1>
-        <p className="text-sm text-ink-muted">Signed in as {state.user?.username}. Two-factor authentication is on.</p>
+        <p className="text-sm text-ink-muted">
+          Signed in as {state.user?.username}
+          {state.role && ` (${ROLE_LABELS[state.role]})`}. Two-factor authentication is on.
+        </p>
       </div>
+      {can('manageAccounts') && <AccountsSection onSelfChanged={refresh} />}
       <Sessions />
       <RecoverySection left={state.recoveryCodesLeft ?? 0} onChange={refresh} />
       <PasswordSection />

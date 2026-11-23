@@ -86,11 +86,12 @@ function makeApp() {
   const auth = new AuthService(db);
   const history = new HistoryStore(db);
   const catalogSync = new CatalogSync(db, new MockCatalogSource(), { intervalMs: 60_000, log: () => {} });
+  const monitor = new ActivityMonitor(new MockSessionSource(), 60_000, () => {});
   const app = createApp(
     { webRoot: 'dist/web', trustProxy: false, secureCookies: 'auto' },
     {
       auth,
-      monitor: new ActivityMonitor(new MockSessionSource(), 60_000, () => {}),
+      monitor,
       history,
       historySync: new HistorySync(history, new MockHistorySource(), { intervalMs: 60_000, log: () => {} }),
       stats: new StatsService(db),
@@ -98,7 +99,7 @@ function makeApp() {
       library: new LibraryService(db, catalogSync),
     },
   );
-  return { app, auth, db };
+  return { app, auth, db, history, monitor };
 }
 
 /** A tiny cookie-keeping client for the app. */
@@ -319,5 +320,159 @@ describe('sign-in flow', () => {
     expect((await c.post('/api/auth/login', { username: 'alex', password: PASSWORD })).json).toEqual({ next: 'enroll' });
     await auth.resetPassword('alex', 'a brand new passphrase');
     expect((await client(app).post('/api/auth/login', { username: 'alex', password: 'a brand new passphrase' })).status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Roles: admins and mods.
+
+describe('roles', () => {
+  /**
+   * Each 2FA code works once, so tests that need several codes move a fake
+   * clock forward 30 seconds per code, as if someone waited for the next one.
+   */
+  function clock() {
+    let now = Date.now();
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    return {
+      code: (secret: string) => {
+        now += 30_000;
+        return codeAt(secret, currentStep(now));
+      },
+      restore: () => spy.mockRestore(),
+    };
+  }
+
+  async function withMod() {
+    const env = await setUp();
+    const history = env.history;
+    history.upsert((await new MockHistorySource().listHistoryPage({ limit: 200 })).items);
+    await env.auth.addAccount('morgan', PASSWORD, 'mod');
+    const mod = client(env.app);
+    await mod.post('/api/auth/login', { username: 'morgan', password: PASSWORD });
+    const modSecret = (await mod.get('/api/auth/enroll')).json!.secret as string;
+    await mod.post('/api/auth/enroll', { code: codeAt(modSecret, currentStep()) });
+    return { ...env, admin: env.c, adminSecret: env.secret, mod };
+  }
+
+  it('makes existing and first accounts admins', async () => {
+    const { c } = await setUp();
+    const state = (await c.get('/api/auth/state')).json!;
+    expect(state.role).toBe('admin');
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications']);
+  });
+
+  it('tells a mod what they can do', async () => {
+    const { mod } = await withMod();
+    const state = (await mod.get('/api/auth/state')).json!;
+    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: [] });
+  });
+
+  it('removes IP addresses from live activity for mods', async () => {
+    const { admin, mod, monitor } = await withMod();
+    await monitor.poll();
+    type Streams = { client: { ip: string | null } }[];
+    const adminStreams = (await admin.get('/api/activity')).json!.streams as Streams;
+    const modStreams = (await mod.get('/api/activity')).json!.streams as Streams;
+    expect(adminStreams.length).toBeGreaterThan(0);
+    expect(adminStreams.some((s) => s.client.ip)).toBe(true);
+    expect(modStreams).toHaveLength(adminStreams.length);
+    expect(modStreams.every((s) => s.client.ip === null)).toBe(true);
+  });
+
+  it('strips IPs from snapshots sent to mods', async () => {
+    const { withoutIps } = await import('../server/app.js');
+    const monitor = new ActivityMonitor(new MockSessionSource(), 60_000, () => {});
+    await monitor.poll();
+    const full = monitor.current();
+    expect(full.streams.some((s) => s.client.ip)).toBe(true);
+    const stripped = withoutIps(full);
+    expect(stripped.streams.every((s) => s.client.ip === null)).toBe(true);
+    expect(full.streams.some((s) => s.client.ip)).toBe(true); // the original is untouched
+  });
+
+  it('hides IPs in history from mods, including from search', async () => {
+    const { admin, mod } = await withMod();
+    const adminPage = (await admin.get('/api/history?pageSize=100')).json!;
+    const modPage = (await mod.get('/api/history?pageSize=100')).json!;
+    const ips = (page: Record<string, unknown>) => (page.items as { client: { ip: string | null } }[]).map((i) => i.client.ip);
+    expect(ips(adminPage).some(Boolean)).toBe(true);
+    expect(ips(modPage).every((ip) => ip === null)).toBe(true);
+
+    // Searching by IP finds plays for admins but nothing for mods.
+    expect((await admin.get('/api/history?search=203.0.113')).json!.total).toBeGreaterThan(0);
+    expect((await mod.get('/api/history?search=203.0.113')).json!.total).toBe(0);
+    // Ordinary searches still work for mods.
+    expect((await mod.get('/api/history?search=harbour')).json!.total).toBeGreaterThan(0);
+  });
+
+  it('hides a user’s IP addresses from mods', async () => {
+    const { admin, mod } = await withMod();
+    const someone = ((await admin.get('/api/users')).json!.users as { id: string; plays: number }[]).find((u) => u.plays > 0)!;
+    expect(((await admin.get(`/api/users/${someone.id}`)).json!.addresses as unknown[]).length).toBeGreaterThan(0);
+    expect((await mod.get(`/api/users/${someone.id}`)).json!.addresses).toEqual([]);
+  });
+
+  it('keeps account management for admins', async () => {
+    const { mod } = await withMod();
+    expect((await mod.get('/api/auth/accounts')).status).toBe(403);
+    expect((await mod.post('/api/auth/accounts', { code: '000000', username: 'eve', password: PASSWORD, role: 'admin' })).status).toBe(403);
+  });
+
+  it('lets admins add accounts, with their 2FA code', async () => {
+    const { admin, adminSecret, app } = await withMod();
+    const t = clock();
+    try {
+      expect((await admin.post('/api/auth/accounts', { code: '000000', username: 'sam', password: PASSWORD, role: 'mod' })).status).toBe(401);
+      const added = await admin.post('/api/auth/accounts', { code: t.code(adminSecret), username: 'sam', password: PASSWORD, role: 'mod' });
+      expect(added.status).toBe(201);
+      expect(added.json!.account).toMatchObject({ username: 'sam', role: 'mod', totpEnabled: false });
+      // The new account sets up 2FA at first sign-in.
+      expect((await client(app).post('/api/auth/login', { username: 'sam', password: PASSWORD })).json).toEqual({ next: 'enroll' });
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('applies role changes straight away', async () => {
+    const { admin, adminSecret, mod } = await withMod();
+    const t = clock();
+    try {
+      const accounts = (await admin.get('/api/auth/accounts')).json!.accounts as { id: number; username: string }[];
+      const morgan = accounts.find((a) => a.username === 'morgan')!;
+      expect((await admin.post(`/api/auth/accounts/${morgan.id}/role`, { code: t.code(adminSecret), role: 'admin' })).status).toBe(200);
+      expect((await mod.get('/api/auth/accounts')).status).toBe(200);
+      expect((await admin.post(`/api/auth/accounts/${morgan.id}/role`, { code: t.code(adminSecret), role: 'mod' })).status).toBe(200);
+      expect((await mod.get('/api/auth/accounts')).status).toBe(403);
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('never leaves Almanac without an admin', async () => {
+    const { admin, adminSecret } = await withMod();
+    const t = clock();
+    try {
+      const body = (await admin.get('/api/auth/accounts')).json!;
+      const me = body.currentId as number;
+      const demote = await admin.post(`/api/auth/accounts/${me}/role`, { code: t.code(adminSecret), role: 'mod' });
+      expect(demote.status).toBe(409);
+      expect(demote.json!.error).toMatch(/only admin/);
+      expect((await admin.post(`/api/auth/accounts/${me}/delete`, { code: t.code(adminSecret) })).status).toBe(409);
+    } finally {
+      t.restore();
+    }
+  });
+
+  it('signs out a deleted account immediately', async () => {
+    const { admin, adminSecret, mod } = await withMod();
+    const t = clock();
+    try {
+      const morgan = ((await admin.get('/api/auth/accounts')).json!.accounts as { id: number; username: string }[]).find((a) => a.username === 'morgan')!;
+      expect((await admin.post(`/api/auth/accounts/${morgan.id}/delete`, { code: t.code(adminSecret) })).status).toBe(200);
+      expect((await mod.get('/api/activity')).status).toBe(401);
+    } finally {
+      t.restore();
+    }
   });
 });

@@ -19,6 +19,7 @@ import {
   formatWhen,
   platformLabel,
 } from '../lib/format';
+import { useAuth } from '../auth/AuthGate';
 import { Link, navigate, useLocation } from '../lib/router';
 
 const PAGE_SIZE = 50;
@@ -104,6 +105,7 @@ async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 
 export function HistoryPage() {
   const { search } = useLocation();
+  const canSeeIps = useAuth().can('viewIpAddresses');
   const filters = useMemo(() => readFilters(search), [search]);
   const [data, setData] = useState<HistoryPageData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -200,7 +202,7 @@ export function HistoryPage() {
           type="search"
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
-          placeholder="Search title, user, player or IP"
+          placeholder={canSeeIps ? 'Search title, user, player or IP' : 'Search title, user or player'}
           aria-label="Search history"
           className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none lg:w-72"
         />
@@ -428,7 +430,7 @@ function HistoryDetails({ entry }: { entry: HistoryEntry }) {
     ['Subtitles', entry.subtitle ? [entry.subtitle.language?.toUpperCase(), codecLabel(entry.subtitle.codec)].filter(Boolean).join(' ') : 'None'],
     ['Player', [entry.client.name, entry.client.version].filter(Boolean).join(' ') || '—'],
     ['Platform', platformLabel(entry.client.platform) ?? '—'],
-    ['IP address', entry.client.ip ?? '—'],
+    ...(entry.client.ip ? ([['IP address', entry.client.ip]] as [string, React.ReactNode][]) : []),
     ['Ended because', endReasonLabel(entry.endReason)],
   ];
 

@@ -1,3 +1,5 @@
+import type { Permission, Role } from '../../../shared/permissions';
+
 /** Fired when the server says the session has ended, so the app can show the sign-in page. */
 export const SIGNED_OUT_EVENT = 'almanac:signed-out';
 
@@ -56,5 +58,7 @@ export interface AuthState {
   setupRequired: boolean;
   stage: 'totp' | 'enroll' | 'full' | null;
   user: { username: string } | null;
+  role: Role | null;
+  permissions: Permission[];
   recoveryCodesLeft: number | null;
 }

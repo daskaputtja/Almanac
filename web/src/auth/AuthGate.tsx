@@ -1,9 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import type { Permission } from '../../../shared/permissions';
 import { SIGNED_OUT_EVENT, api, type AuthState } from '../lib/api';
 import { AuthScreens } from './AuthScreens';
 
 interface AuthContextValue {
   state: AuthState;
+  /** Whether the signed-in account may do something. The server enforces this too. */
+  can: (permission: Permission) => boolean;
   refresh: () => void;
   signOut: () => Promise<void>;
 }
@@ -59,5 +62,6 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (!state) return null;
   if (state.stage !== 'full') return <AuthScreens state={state} onChange={refresh} />;
 
-  return <AuthContext.Provider value={{ state, refresh, signOut }}>{children}</AuthContext.Provider>;
+  const can = (permission: Permission) => state.permissions.includes(permission);
+  return <AuthContext.Provider value={{ state, can, refresh, signOut }}>{children}</AuthContext.Provider>;
 }

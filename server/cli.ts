@@ -4,15 +4,17 @@
  *   docker exec -it almanac almanac-cli users
  *   docker exec -it almanac almanac-cli reset-2fa <username>
  *   docker exec -it almanac almanac-cli reset-password <username>
+ *   docker exec -it almanac almanac-cli set-role <username> admin|mod
  *
  * Outside Docker: npm run cli -- <command>
  */
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { isRole } from '../shared/permissions.js';
 import { AuthError, AuthService } from './auth/service.js';
 import { openDatabase } from './db/database.js';
 
-const [command, username] = process.argv.slice(2);
+const [command, username, extra] = process.argv.slice(2);
 const dataDir = process.env.DATA_DIR ?? 'data';
 const mock = ['1', 'true', 'yes', 'on'].includes((process.env.SILO_MOCK ?? '').toLowerCase());
 const db = openDatabase(join(dataDir, mock ? 'almanac-demo.db' : 'almanac.db'));
@@ -40,7 +42,7 @@ async function main(): Promise<number> {
     case 'users': {
       const users = auth.listUsernames();
       if (!users.length) console.log('No accounts yet.');
-      for (const u of users) console.log(`${u.username}${u.totpEnabled ? '' : '  (2FA not set up)'}`);
+      for (const u of users) console.log(`${u.username.padEnd(24)} ${u.role.padEnd(6)}${u.totpEnabled ? '' : ' (2FA not set up)'}`);
       return 0;
     }
     case 'reset-2fa': {
@@ -48,6 +50,12 @@ async function main(): Promise<number> {
       auth.resetTwoFactor(username);
       console.log(`Two-factor authentication for ${username} is reset and all their sessions are signed out.`);
       console.log('They will set up 2FA again the next time they sign in.');
+      return 0;
+    }
+    case 'set-role': {
+      if (!username || !isRole(extra)) break;
+      auth.setRoleByName(username, extra);
+      console.log(`${username} is now ${extra === 'admin' ? 'an admin' : 'a mod'}.`);
       return 0;
     }
     case 'reset-password': {
@@ -69,6 +77,7 @@ async function main(): Promise<number> {
   console.log('  almanac-cli users                      List accounts');
   console.log('  almanac-cli reset-2fa <username>       Turn off 2FA so it can be set up again');
   console.log('  almanac-cli reset-password <username>  Set a new password');
+  console.log('  almanac-cli set-role <username> admin|mod');
   return command ? 1 : 0;
 }
 

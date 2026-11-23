@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { isRole, type Role } from '../../shared/permissions.js';
 import { type Database, transaction } from '../db/database.js';
 import {
   dummyPasswordHash,
@@ -17,7 +18,18 @@ export type SessionStage = 'totp' | 'enroll' | 'full';
 export interface AuthUser {
   id: number;
   username: string;
+  role: Role;
   totpEnabled: boolean;
+}
+
+export interface AccountInfo {
+  id: number;
+  username: string;
+  role: Role;
+  totpEnabled: boolean;
+  createdAt: string;
+  /** Most recent activity of any of the account's sessions. */
+  lastSeenAt: string | null;
 }
 
 export interface Session {
@@ -63,6 +75,7 @@ const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,32}$/;
 
 interface UserRow {
   id: number;
+  role: string;
   username: string;
   password_hash: string;
   totp_secret: string | null;
@@ -98,7 +111,7 @@ export class AuthService {
     return (this.db.prepare('SELECT COUNT(*) AS n FROM auth_users').get() as { n: number }).n > 0;
   }
 
-  async createUser(username: string, password: string): Promise<AuthUser> {
+  async createUser(username: string, password: string, role: Role = 'admin'): Promise<AuthUser> {
     const name = username.trim();
     if (!USERNAME_PATTERN.test(name)) {
       throw new AuthError('Usernames are 3–32 characters: letters, numbers, dots, dashes and underscores.');
@@ -110,9 +123,9 @@ export class AuthService {
     const now = new Date().toISOString();
     const hash = await hashPassword(password);
     const result = this.db
-      .prepare('INSERT INTO auth_users (username, password_hash, created_at, password_changed_at) VALUES (?, ?, ?, ?)')
-      .run(name, hash, now, now);
-    return { id: Number(result.lastInsertRowid), username: name, totpEnabled: false };
+      .prepare('INSERT INTO auth_users (username, password_hash, role, created_at, password_changed_at) VALUES (?, ?, ?, ?, ?)')
+      .run(name, hash, role, now, now);
+    return { id: Number(result.lastInsertRowid), username: name, role, totpEnabled: false };
   }
 
   /** First-run setup from the web page. Returns a session that must set up 2FA next. */
@@ -157,7 +170,7 @@ export class AuthService {
       publicId: row.public_id,
       stage: row.stage,
       pendingSecret: row.pending_secret,
-      user: { id: user.id, username: user.username, totpEnabled: user.totp_enabled === 1 },
+      user: { id: user.id, username: user.username, role: roleOf(user), totpEnabled: user.totp_enabled === 1 },
     };
   }
 
@@ -268,6 +281,77 @@ export class AuthService {
     ).n;
   }
 
+  // ----- Account management (admins) -----
+
+  accounts(): AccountInfo[] {
+    const rows = this.db
+      .prepare(
+        `SELECT u.id, u.username, u.role, u.totp_enabled, u.created_at,
+                (SELECT MAX(last_seen_at) FROM auth_sessions s WHERE s.user_id = u.id AND s.stage = 'full') AS last_seen_at
+         FROM auth_users u ORDER BY u.username COLLATE NOCASE`,
+      )
+      .all() as { id: number; username: string; role: string; totp_enabled: number; created_at: string; last_seen_at: string | null }[];
+    return rows.map((r) => ({
+      id: r.id,
+      username: r.username,
+      role: isRole(r.role) ? r.role : 'mod',
+      totpEnabled: r.totp_enabled === 1,
+      createdAt: r.created_at,
+      lastSeenAt: r.last_seen_at,
+    }));
+  }
+
+  /** Confirm the acting admin's identity with a fresh 2FA code before an account change. */
+  confirmWithCode(userId: number, code: string): void {
+    const user = this.db.prepare('SELECT * FROM auth_users WHERE id = ?').get(userId) as unknown as UserRow;
+    this.checkCode(user, code);
+  }
+
+  async addAccount(username: string, password: string, role: Role): Promise<AccountInfo> {
+    const user = await this.createUser(username, password, role);
+    return this.accounts().find((a) => a.id === user.id)!;
+  }
+
+  setRole(actingUserId: number, targetId: number, role: Role): void {
+    const target = this.requireAccount(targetId);
+    // Admins may change their own role too, as long as another admin remains.
+    void actingUserId;
+    if (roleOf(target) === 'admin' && role !== 'admin') this.ensureAnotherAdmin(targetId, 'demote');
+    this.db.prepare('UPDATE auth_users SET role = ? WHERE id = ?').run(role, targetId);
+  }
+
+  deleteAccount(actingUserId: number, targetId: number): void {
+    const target = this.requireAccount(targetId);
+    if (targetId === actingUserId) throw new AuthError('You can’t delete your own account. Ask another admin.', 409);
+    if (roleOf(target) === 'admin') this.ensureAnotherAdmin(targetId, 'delete');
+    // Sessions and recovery codes go with it (ON DELETE CASCADE).
+    this.db.prepare('DELETE FROM auth_users WHERE id = ?').run(targetId);
+  }
+
+  resetTwoFactorById(targetId: number): void {
+    this.resetTwoFactor(this.requireAccount(targetId).username);
+  }
+
+  async resetPasswordById(targetId: number, password: string): Promise<void> {
+    await this.resetPassword(this.requireAccount(targetId).username, password);
+  }
+
+  private requireAccount(id: number): UserRow {
+    const user = this.db.prepare('SELECT * FROM auth_users WHERE id = ?').get(id) as unknown as UserRow | undefined;
+    if (!user) throw new AuthError('No such account.', 404);
+    return user;
+  }
+
+  /** There must always be at least one admin, or nobody could manage accounts. */
+  private ensureAnotherAdmin(exceptId: number, action: 'demote' | 'delete'): void {
+    const others = (
+      this.db.prepare("SELECT COUNT(*) AS n FROM auth_users WHERE role = 'admin' AND id <> ?").get(exceptId) as { n: number }
+    ).n;
+    if (others === 0) {
+      throw new AuthError(`You can’t ${action} the only admin. Make someone else an admin first.`, 409);
+    }
+  }
+
   // ----- For the command-line recovery tool -----
 
   /** Turn off 2FA for an account and sign it out everywhere; it sets 2FA up again at next sign-in. */
@@ -293,10 +377,16 @@ export class AuthService {
     });
   }
 
-  listUsernames(): { username: string; totpEnabled: boolean }[] {
-    return (this.db.prepare('SELECT username, totp_enabled FROM auth_users ORDER BY username').all() as { username: string; totp_enabled: number }[]).map(
-      (u) => ({ username: u.username, totpEnabled: u.totp_enabled === 1 }),
-    );
+  listUsernames(): { username: string; role: Role; totpEnabled: boolean }[] {
+    return this.accounts().map((a) => ({ username: a.username, role: a.role, totpEnabled: a.totpEnabled }));
+  }
+
+  /** For the CLI: change a role by username, e.g. to recover admin access. */
+  setRoleByName(username: string, role: Role): void {
+    const user = this.findUser(username);
+    if (!user) throw new AuthError(`No account called ${username}.`, 404);
+    if (roleOf(user) === 'admin' && role !== 'admin') this.ensureAnotherAdmin(user.id, 'demote');
+    this.db.prepare('UPDATE auth_users SET role = ? WHERE id = ?').run(role, user.id);
   }
 
   // ----- Internals -----
@@ -356,6 +446,11 @@ export class AuthService {
     for (const code of codes) insert.run(userId, sha256(normalizeRecoveryCode(code)));
     return codes;
   }
+}
+
+function roleOf(user: { role: string }): Role {
+  // Unknown values get the least access.
+  return isRole(user.role) ? user.role : 'mod';
 }
 
 export { currentStep };

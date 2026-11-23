@@ -157,18 +157,17 @@ export class HistoryStore {
     });
   }
 
-  query(query: HistoryQuery = {}): HistoryPage {
+  /** `includeIp: false` leaves IP addresses out of the search and the results (for mods). */
+  query(query: HistoryQuery = {}, { includeIp = true }: { includeIp?: boolean } = {}): HistoryPage {
     const where: string[] = [];
     const params: SQLInputValue[] = [];
 
     const search = query.search?.trim();
     if (search) {
       const like = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-      where.push(
-        `(title LIKE ? ESCAPE '\\' OR series_title LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\'
-          OR client_name LIKE ? ESCAPE '\\' OR client_ip LIKE ? ESCAPE '\\')`,
-      );
-      params.push(like, like, like, like, like);
+      const columns = ['title', 'series_title', 'username', 'client_name', ...(includeIp ? ['client_ip'] : [])];
+      where.push(`(${columns.map((c) => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+      params.push(...columns.map(() => like));
     }
     if (query.userId) {
       where.push('user_id = ?');
@@ -221,7 +220,9 @@ export class HistoryStore {
       )
       .all(...params, pageSize, (page - 1) * pageSize) as unknown as PlayRow[];
 
-    return { items: rows.map(toHistoryEntry), total, page, pageSize };
+    const items = rows.map(toHistoryEntry);
+    if (!includeIp) for (const item of items) item.client.ip = null;
+    return { items, total, page, pageSize };
   }
 
   filterOptions(): HistoryFilterOptions {

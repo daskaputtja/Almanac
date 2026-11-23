@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { HistoryEntry, HistoryPage } from '../../../shared/history';
 import type { StatsRankBy } from '../../../shared/stats';
 import type { UserDetail } from '../../../shared/users';
+import { useAuth } from '../auth/AuthGate';
 import { Avatar, RoleBadges } from '../components/Avatar';
 import { MethodBadge } from '../components/MethodBadge';
 import { StreamCard } from '../components/StreamCard';
@@ -31,6 +32,7 @@ export function UserPage({ userId }: { userId: string }) {
   const [recent, setRecent] = useState<HistoryEntry[] | null>(null);
   const { data, view, loading } = useStats(period, userId, rankBy);
   const activity = useActivity();
+  const canSeeIps = useAuth().can('viewIpAddresses');
   const now = useNow();
 
   const setParam = (key: string, value: string | null) => {
@@ -166,18 +168,20 @@ export function UserPage({ userId }: { userId: string }) {
       </section>
 
       {user && (
-        <div className="grid gap-5 lg:grid-cols-3">
+        <div className={`grid gap-5 ${canSeeIps ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
           <SimpleTable
             title="Players"
             headers={['Player', 'Platform', 'Plays', 'Last used']}
             rows={user.devices.map((d) => [d.player, platformLabel(d.platform) ?? '—', d.plays.toLocaleString(), formatWhen(d.lastPlayedAt)])}
           />
-          <SimpleTable
-            title="IP addresses"
-            headers={['Address', 'Plays', 'First seen', 'Last seen']}
-            rows={user.addresses.map((a) => [a.ip, a.plays.toLocaleString(), formatWhen(a.firstSeenAt), formatWhen(a.lastSeenAt)])}
-            note={user.addresses.length === 50 ? 'Showing the 50 most recent addresses.' : undefined}
-          />
+          {canSeeIps && (
+            <SimpleTable
+              title="IP addresses"
+              headers={['Address', 'Plays', 'First seen', 'Last seen']}
+              rows={user.addresses.map((a) => [a.ip, a.plays.toLocaleString(), formatWhen(a.firstSeenAt), formatWhen(a.lastSeenAt)])}
+              note={user.addresses.length === 50 ? 'Showing the 50 most recent addresses.' : undefined}
+            />
+          )}
           <SimpleTable
             title="Profiles"
             headers={['Profile', 'Plays', 'Last used']}

@@ -148,6 +148,9 @@ const MIGRATIONS: string[] = [
     );
     CREATE INDEX auth_sessions_user ON auth_sessions (user_id);
   `,
+  /* 7: account roles. Accounts that existed before roles are admins. */ `
+    ALTER TABLE auth_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin';
+  `,
 ];
 
 export type Database = DatabaseSync;

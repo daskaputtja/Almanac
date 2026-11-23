@@ -4,6 +4,7 @@ import { METHOD_STYLES } from '../components/MethodBadge';
 import { StreamCard } from '../components/StreamCard';
 import { SummaryTiles } from '../components/SummaryTiles';
 import { PLAY_METHOD_LABELS, livePosition, titleLines } from '../lib/format';
+import { useAuth } from '../auth/AuthGate';
 import { useActivity, useNow } from '../lib/useActivity';
 
 type SortKey = 'newest' | 'user' | 'title' | 'bandwidth' | 'remaining';
@@ -27,6 +28,7 @@ const METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
 
 export function ActivityPage() {
   const { snapshot, receivedAt, connection } = useActivity();
+  const canSeeIps = useAuth().can('viewIpAddresses');
   const now = useNow();
   const [query, setQuery] = useState('');
   const [method, setMethod] = useState<PlayMethod | 'all'>('all');
@@ -82,7 +84,7 @@ export function ActivityPage() {
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search user, title, player or IP"
+            placeholder={canSeeIps ? 'Search user, title, player or IP' : 'Search user, title or player'}
             className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none sm:max-w-xs"
           />
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by playback">

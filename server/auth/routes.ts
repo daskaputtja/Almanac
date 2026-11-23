@@ -2,6 +2,7 @@ import { getConnInfo } from '@hono/node-server/conninfo';
 import { type Context, Hono, type MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import QRCode from 'qrcode';
+import { type Permission, can, isRole, permissionsFor } from '../../shared/permissions.js';
 import { FailureLimiter } from './rateLimit.js';
 import { AuthError, type AuthService, type ClientInfo, type Session } from './service.js';
 import { otpauthUrl } from './totp.js';
@@ -17,7 +18,16 @@ export interface AuthOptions {
   secureCookies: 'auto' | 'always' | 'never';
 }
 
-type Env = { Variables: { session: Session; token: string } };
+export type AuthEnv = { Variables: { session: Session; token: string } };
+type Env = AuthEnv;
+
+/** Refuse with 403 unless the signed-in account's role has `permission`. Use after requireSession. */
+export function requirePermission(permission: Permission): MiddlewareHandler<AuthEnv> {
+  return async (c, next) => {
+    if (!can(c.get('session').user.role, permission)) return c.json({ error: 'Your account doesn’t have access to this.' }, 403);
+    return next();
+  };
+}
 
 /** Pending sign-ins live 10 minutes; full sessions 30 days. The cookie lasts as long. */
 const COOKIE_MAX_AGE = { pending: 10 * 60, full: 30 * 86_400 };
@@ -124,6 +134,8 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
       setupRequired: !auth.hasUsers(),
       stage: session?.stage ?? null,
       user: session ? { username: session.user.username } : null,
+      role: session?.stage === 'full' ? session.user.role : null,
+      permissions: session?.stage === 'full' ? permissionsFor(session.user.role) : [],
       recoveryCodesLeft: session?.stage === 'full' ? auth.recoveryCodesLeft(session.user.id) : null,
     });
   });
@@ -234,6 +246,61 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
       if (err instanceof AuthError && err.status === 401) recordFailure(c);
       throw err;
     }
+  });
+
+  // Managing accounts: admins only, and each change needs the admin's own 2FA code.
+  routes.use('/accounts/*', requireSession, requirePermission('manageAccounts'));
+  routes.use('/accounts', requireSession, requirePermission('manageAccounts'));
+
+  routes.get('/accounts', (c) => c.json({ accounts: auth.accounts(), currentId: c.get('session').user.id }));
+
+  const confirmed = async (c: Context<Env>) => {
+    checkLimits(c);
+    const input = await body<{ code: string; username: string; password: string; role: string }>(c);
+    try {
+      auth.confirmWithCode(c.get('session').user.id, str(input.code));
+    } catch (err) {
+      if (err instanceof AuthError && err.status === 401) recordFailure(c);
+      throw err;
+    }
+    return input;
+  };
+  const targetId = (c: Context<Env>) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) throw new AuthError('No such account.', 404);
+    return id;
+  };
+
+  routes.post('/accounts', async (c) => {
+    const { username, password, role } = await confirmed(c);
+    if (!isRole(role)) throw new AuthError('Choose a role.');
+    const account = await auth.addAccount(str(username), str(password), role);
+    return c.json({ account }, 201);
+  });
+
+  routes.post('/accounts/:id/role', async (c) => {
+    const { role } = await confirmed(c);
+    if (!isRole(role)) throw new AuthError('Choose a role.');
+    auth.setRole(c.get('session').user.id, targetId(c), role);
+    return c.json({ ok: true });
+  });
+
+  routes.post('/accounts/:id/reset-2fa', async (c) => {
+    await confirmed(c);
+    auth.resetTwoFactorById(targetId(c));
+    return c.json({ ok: true });
+  });
+
+  routes.post('/accounts/:id/password', async (c) => {
+    const { password } = await confirmed(c);
+    await auth.resetPasswordById(targetId(c), str(password));
+    return c.json({ ok: true });
+  });
+
+  routes.post('/accounts/:id/delete', async (c) => {
+    await confirmed(c);
+    auth.deleteAccount(c.get('session').user.id, targetId(c));
+    return c.json({ ok: true });
   });
 
   return { routes, csrf, requireSession };
