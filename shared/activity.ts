@@ -101,4 +101,9 @@ export interface ActivitySnapshot {
   fetchedAt: string | null;
   /** The last error talking to Silo, or null if the last poll succeeded. */
   error: string | null;
+  /**
+   * For users streaming from more than one network right now: how many.
+   * Only the count, so it's safe to show to mods.
+   */
+  liveNetworks?: Record<string, number>;
 }

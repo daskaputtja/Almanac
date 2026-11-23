@@ -10,6 +10,7 @@ import { HistoryStore } from '../server/history/store.js';
 import { HistorySync } from '../server/history/sync.js';
 import { LibraryService } from '../server/library/library.js';
 import { CatalogSync } from '../server/library/sync.js';
+import { ModerationService } from '../server/moderation/service.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
 import { UsersService } from '../server/users/users.js';
@@ -97,6 +98,7 @@ function makeApp() {
       stats: new StatsService(db),
       users: new UsersService(db),
       library: new LibraryService(db, catalogSync),
+      moderation: new ModerationService(db),
     },
   );
   return { app, auth, db, history, monitor };
@@ -359,13 +361,13 @@ describe('roles', () => {
     const { c } = await setUp();
     const state = (await c.get('/api/auth/state')).json!;
     expect(state.role).toBe('admin');
-    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications']);
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes']);
   });
 
   it('tells a mod what they can do', async () => {
     const { mod } = await withMod();
     const state = (await mod.get('/api/auth/state')).json!;
-    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: [] });
+    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: ['moderate'] });
   });
 
   it('removes IP addresses from live activity for mods', async () => {
@@ -411,6 +413,20 @@ describe('roles', () => {
     const someone = ((await admin.get('/api/users')).json!.users as { id: string; plays: number }[]).find((u) => u.plays > 0)!;
     expect(((await admin.get(`/api/users/${someone.id}`)).json!.addresses as unknown[]).length).toBeGreaterThan(0);
     expect((await mod.get(`/api/users/${someone.id}`)).json!.addresses).toEqual([]);
+  });
+
+  it('opens moderation to mods and admins, but not to signed-out visitors', async () => {
+    const { app, admin, mod } = await withMod();
+    expect((await client(app).get('/api/moderation/flags')).status).toBe(401);
+    expect((await mod.get('/api/moderation/flags')).status).toBe(200);
+    expect((await admin.get('/api/moderation/flags')).status).toBe(200);
+
+    expect((await mod.post('/api/moderation/users/100/tags', { tags: ['VIP', 'Warned'] })).json).toEqual({ tags: ['VIP', 'Warned'] });
+    expect((await admin.get('/api/moderation/tags')).json!.byUser).toEqual({ '100': ['VIP', 'Warned'] });
+    expect((await mod.post('/api/moderation/users/100/notes', { body: 'Hello' })).status).toBe(201);
+    const notes = (await admin.get('/api/moderation/users/100/notes')).json!.notes as { id: number; canEdit: boolean }[];
+    expect(notes[0]!.canEdit).toBe(true); // admins can edit anyone's notes
+    expect((await mod.post('/api/moderation/notes/999/delete')).status).toBe(404);
   });
 
   it('keeps account management for admins', async () => {

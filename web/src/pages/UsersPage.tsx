@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { UserSummary, UsersResponse } from '../../../shared/users';
 import { Avatar, RoleBadges } from '../components/Avatar';
+import { UserTags } from '../components/UserTags';
 import { formatWhen, platformLabel } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
 import { formatHours } from '../lib/statsData';
@@ -155,6 +156,7 @@ export function UsersPage() {
                         {u.name}
                       </Link>
                       <RoleBadges role={u.role} isOwner={u.isOwner} enabled={u.enabled} inSilo={u.inSilo} />
+                      <UserTags userId={u.id} />
                     </div>
                   </td>
                   <td className="max-w-[18rem] px-3 py-2.5">

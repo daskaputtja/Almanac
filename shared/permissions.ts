@@ -14,7 +14,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: 'Sees everything and manages accounts.',
-  mod: 'Sees activity, history, statistics, users and libraries, without IP addresses. Can’t manage accounts or notifications.',
+  mod: 'Sees everything except IP addresses, and handles flags, notes and tags. Can’t manage accounts or notifications.',
 };
 
 export type Permission =
@@ -23,12 +23,18 @@ export type Permission =
   /** Add, change and remove Almanac accounts. */
   | 'manageAccounts'
   /** See and change notification settings (Discord and others). */
-  | 'manageNotifications';
+  | 'manageNotifications'
+  /** See account flags, review them, and read and write notes and tags on users. */
+  | 'moderate'
+  /** Edit or delete anyone's notes, not just your own. */
+  | 'manageAllNotes';
 
 const GRANTS: Record<Permission, Role[]> = {
   viewIpAddresses: ['admin'],
   manageAccounts: ['admin'],
   manageNotifications: ['admin'],
+  moderate: ['admin', 'mod'],
+  manageAllNotes: ['admin'],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

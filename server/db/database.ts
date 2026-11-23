@@ -151,6 +151,47 @@ const MIGRATIONS: string[] = [
   /* 7: account roles. Accounts that existed before roles are admins. */ `
     ALTER TABLE auth_users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin';
   `,
+  /* 8: moderation: account flags, notes and tags on Silo users */ `
+    -- One row per user and kind of flag. Rows stay after the behaviour stops
+    -- (active = 0) so a reviewed flag can reopen if it comes back worse.
+    CREATE TABLE moderation_flags (
+      user_id        TEXT NOT NULL,
+      kind           TEXT NOT NULL,
+      severity       TEXT NOT NULL,
+      value          REAL NOT NULL,
+      headline       TEXT NOT NULL,
+      details        TEXT NOT NULL,
+      admin_details  TEXT NOT NULL DEFAULT '[]',
+      first_seen     TEXT NOT NULL,
+      last_seen      TEXT NOT NULL,
+      active         INTEGER NOT NULL DEFAULT 1,
+      status         TEXT NOT NULL DEFAULT 'open',
+      reviewed_by    TEXT,
+      reviewed_at    TEXT,
+      review_note    TEXT,
+      reviewed_value REAL,
+      PRIMARY KEY (user_id, kind)
+    );
+
+    CREATE TABLE user_notes (
+      id          INTEGER PRIMARY KEY,
+      user_id     TEXT NOT NULL,
+      author_id   INTEGER,
+      author_name TEXT NOT NULL,
+      body        TEXT NOT NULL,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL
+    );
+    CREATE INDEX user_notes_user ON user_notes (user_id, created_at DESC);
+
+    CREATE TABLE user_tags (
+      user_id   TEXT NOT NULL,
+      tag       TEXT NOT NULL COLLATE NOCASE,
+      added_by  TEXT NOT NULL,
+      added_at  TEXT NOT NULL,
+      PRIMARY KEY (user_id, tag)
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;

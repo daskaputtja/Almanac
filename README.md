@@ -52,6 +52,18 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - A poster grid of recently added movies and shows, with new episodes grouped by show and 4K and HDR badges
 - Filter by library, movies or shows, and the last 7 or 30 days
 
+### Moderation ✅
+- **Account flags**, checked every 5 minutes over the last 7 days:
+  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, or 7 or more devices in a week
+  - *Non-stop playback* (restreaming, or a TV left on): 24 hours or more without a break, or 12 or more hours a day on average
+  - *Possible ripping:* 20 or more titles (or 5 or more movies) played to the end back to back with no pauses, or finished much faster than their running time
+- Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
+- *Mark as reviewed* with a note; a reviewed flag reopens if the behaviour gets clearly worse
+- "On 3 networks now" badges on Activity while it's happening
+- Shared **notes** and **tags** on any user (for example VIP, Family, Warned), with tags shown next to their name everywhere
+
+Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and all private addresses count as one home network), so phones changing address don't cause flags. Mods see the counts and evidence but never the addresses.
+
 ### Later
 - Notifications to Discord and other services
 - Recently added newsletters
@@ -140,6 +152,9 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 |---|---|---|
 | Activity, History, Statistics, Users, Libraries | ✅ | ✅ |
 | Viewers' IP addresses (and searching by IP) | ✅ | ❌ |
+| Moderation: flags, notes and tags | ✅ | ✅ |
+| Which networks a flagged account used | ✅ | ❌ |
+| Edit or delete other people's notes | ✅ | ❌ |
 | Notification settings (Discord and others) | ✅ | ❌ |
 | Add, change and remove accounts | ✅ | ❌ |
 
@@ -201,6 +216,7 @@ server/            The Almanac server (Hono on Node.js)
   users/           Accounts combined with their play history
   library/         Copying Silo's catalog and the Libraries page's queries
   auth/            Accounts, passwords, two-factor codes, sessions and sign-in routes
+  moderation/      Account flag checks (detect.ts holds the thresholds), notes and tags
   cli.ts           The almanac-cli recovery tool
   db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard

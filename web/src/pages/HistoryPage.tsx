@@ -8,6 +8,7 @@ import type {
   HistorySyncStatus,
 } from '../../../shared/history';
 import { MethodBadge } from '../components/MethodBadge';
+import { UserTags } from '../components/UserTags';
 import {
   PLAY_METHOD_LABELS,
   codecLabel,
@@ -356,7 +357,8 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
           className="font-medium text-harvest hover:underline"
         >
           {entry.user.name}
-        </Link>
+        </Link>{' '}
+        <UserTags userId={entry.user.id} />
         {entry.user.profileName && entry.user.profileName !== 'Main' && (
           <span className="text-ink-faint"> · {entry.user.profileName}</span>
         )}

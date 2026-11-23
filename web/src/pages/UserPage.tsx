@@ -16,7 +16,9 @@ import {
   StatTiles,
   useStats,
 } from '../components/StatsSections';
+import { NotesAndTags } from '../components/NotesAndTags';
 import { TopList } from '../components/TopList';
+import { UserTags } from '../components/UserTags';
 import { episodeCode, formatDuration, formatFullDate, formatWhen, livePosition, platformLabel } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
 import { useActivity, useNow } from '../lib/useActivity';
@@ -32,7 +34,8 @@ export function UserPage({ userId }: { userId: string }) {
   const [recent, setRecent] = useState<HistoryEntry[] | null>(null);
   const { data, view, loading } = useStats(period, userId, rankBy);
   const activity = useActivity();
-  const canSeeIps = useAuth().can('viewIpAddresses');
+  const { can } = useAuth();
+  const canSeeIps = can('viewIpAddresses');
   const now = useNow();
 
   const setParam = (key: string, value: string | null) => {
@@ -89,6 +92,7 @@ export function UserPage({ userId }: { userId: string }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold">{user.name}</h1>
               <RoleBadges role={user.role} isOwner={user.isOwner} enabled={user.enabled} inSilo={user.inSilo} />
+              <UserTags userId={user.id} />
             </div>
             <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-muted">
               {user.createdAt && <Fact label="Member since" value={new Date(user.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })} />}
@@ -103,12 +107,19 @@ export function UserPage({ userId }: { userId: string }) {
         <div className="h-16" />
       )}
 
+      {user && can('moderate') && <NotesAndTags userId={user.id} username={user.name} />}
+
       {watchingNow.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold">Watching now</h2>
           <div className="grid gap-3 lg:grid-cols-2">
             {watchingNow.map((s) => (
-              <StreamCard key={s.id} stream={s} position={livePosition(s, activity.snapshot!.fetchedAt, activity.receivedAt, now)} />
+              <StreamCard
+                key={s.id}
+                stream={s}
+                liveNetworks={activity.snapshot?.liveNetworks?.[s.user.id]}
+                position={livePosition(s, activity.snapshot!.fetchedAt, activity.receivedAt, now)}
+              />
             ))}
           </div>
         </section>

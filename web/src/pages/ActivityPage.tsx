@@ -127,6 +127,7 @@ export function ActivityPage() {
           {streams.map((stream) => (
             <StreamCard
               key={stream.id}
+              liveNetworks={snapshot.liveNetworks?.[stream.user.id]}
               stream={stream}
               position={livePosition(stream, snapshot.fetchedAt, receivedAt, now)}
             />

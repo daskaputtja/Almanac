@@ -8,13 +8,14 @@ import type { ActivityMonitor } from './activity/monitor.js';
 import type { ActivitySnapshot } from '../shared/activity.js';
 import { can } from '../shared/permissions.js';
 import type { UserDetail } from '../shared/users.js';
-import { type AuthEnv, createAuth } from './auth/routes.js';
+import { type AuthEnv, createAuth, requirePermission } from './auth/routes.js';
 import type { AuthService } from './auth/service.js';
 import type { Config } from './config.js';
 import type { StatsQuery } from '../shared/stats.js';
 import type { HistoryStore } from './history/store.js';
 import type { HistorySync } from './history/sync.js';
 import type { LibraryService } from './library/library.js';
+import { type Actor, ModerationError, type ModerationService } from './moderation/service.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -26,6 +27,7 @@ export interface AppServices {
   stats: StatsService;
   users: UsersService;
   library: LibraryService;
+  moderation: ModerationService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -88,7 +90,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -175,6 +177,66 @@ export function createApp(
         limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
       }),
     });
+  });
+
+  // ----- Moderation: flags, notes and tags (admins and mods) -----
+  app.use('/api/moderation/*', requirePermission('moderate'));
+  app.onError((err, c) => {
+    if (err instanceof ModerationError) return c.json({ error: err.message }, err.status);
+    console.error(err);
+    return c.json({ error: 'Something went wrong.' }, 500);
+  });
+  const actor = (c: { get: (key: 'session') => AuthEnv['Variables']['session'] }): Actor => {
+    const { user } = c.get('session');
+    return { id: user.id, name: user.username, manageAllNotes: can(user.role, 'manageAllNotes') };
+  };
+  const jsonBody = async (c: { req: { json: () => Promise<unknown> } }): Promise<Record<string, unknown>> => {
+    try {
+      const body = await c.req.json();
+      return body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  };
+  const text = (v: unknown) => (typeof v === 'string' ? v : '');
+
+  app.get('/api/moderation/flags', (c) => {
+    const status = c.req.query('status');
+    return c.json(
+      moderation.flags({
+        status: status === 'reviewed' || status === 'all' ? status : status === 'open' ? 'open' : 'all',
+        userId: c.req.query('user') || undefined,
+        includeAdminDetails: seesIps(c),
+      }),
+    );
+  });
+  app.post('/api/moderation/flags/:id/review', async (c) => {
+    moderation.review(c.req.param('id'), actor(c), text((await jsonBody(c)).note));
+    return c.json({ ok: true });
+  });
+  app.post('/api/moderation/flags/:id/reopen', (c) => {
+    moderation.reopen(c.req.param('id'));
+    return c.json({ ok: true });
+  });
+
+  app.get('/api/moderation/users/:id/notes', (c) => c.json({ notes: moderation.notes(c.req.param('id'), actor(c)) }));
+  app.post('/api/moderation/users/:id/notes', async (c) => {
+    moderation.addNote(c.req.param('id'), actor(c), text((await jsonBody(c)).body));
+    return c.json({ ok: true }, 201);
+  });
+  app.post('/api/moderation/notes/:id', async (c) => {
+    moderation.editNote(Number(c.req.param('id')), actor(c), text((await jsonBody(c)).body));
+    return c.json({ ok: true });
+  });
+  app.post('/api/moderation/notes/:id/delete', (c) => {
+    moderation.deleteNote(Number(c.req.param('id')), actor(c));
+    return c.json({ ok: true });
+  });
+
+  app.get('/api/moderation/tags', (c) => c.json(moderation.tags()));
+  app.post('/api/moderation/users/:id/tags', async (c) => {
+    const tags = (await jsonBody(c)).tags;
+    return c.json({ tags: moderation.setTags(c.req.param('id'), actor(c), Array.isArray(tags) ? tags : []) });
   });
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

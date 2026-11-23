@@ -1,5 +1,6 @@
 import type { ActivitySnapshot } from '../../shared/activity.js';
 import type { SessionSource } from '../silo/client.js';
+import { networkOf } from '../moderation/detect.js';
 import { summarize, toActivityStream } from './map.js';
 
 type Listener = (snapshot: ActivitySnapshot) => void;
@@ -59,6 +60,7 @@ export class ActivityMonitor {
         summary: summarize(streams),
         fetchedAt: new Date().toISOString(),
         error: null,
+        liveNetworks: countLiveNetworks(streams),
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -74,4 +76,19 @@ export class ActivityMonitor {
     await this.poll();
     if (this.running) this.timer = setTimeout(() => void this.tick(), this.intervalMs);
   }
+}
+
+/** Users on more than one network right now, and how many. */
+function countLiveNetworks(streams: ActivitySnapshot['streams']): Record<string, number> {
+  const byUser = new Map<string, Set<string>>();
+  for (const s of streams) {
+    const network = networkOf(s.client.ip);
+    if (!network) continue;
+    let set = byUser.get(s.user.id);
+    if (!set) byUser.set(s.user.id, (set = new Set()));
+    set.add(network);
+  }
+  const result: Record<string, number> = {};
+  for (const [user, networks] of byUser) if (networks.size > 1) result[user] = networks.size;
+  return result;
 }

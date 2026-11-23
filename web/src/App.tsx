@@ -1,29 +1,42 @@
 import { useEffect, useRef, useState } from 'react';
-import { ROLE_LABELS } from '../../shared/permissions';
+import { type Permission, ROLE_LABELS } from '../../shared/permissions';
 import { useAuth } from './auth/AuthGate';
 import { ActivityPage } from './pages/ActivityPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { LibrariesPage } from './pages/LibrariesPage';
 import { StatsPage } from './pages/StatsPage';
 import { UserPage } from './pages/UserPage';
+import { ModerationPage } from './pages/ModerationPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ModerationProvider, useModeration } from './lib/moderation';
 import { UsersPage } from './pages/UsersPage';
 import { Link, useLocation } from './lib/router';
 
-type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'settings';
+type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings';
 
-const NAV: { label: string; path?: string; page?: Page }[] = [
+const NAV: { label: string; path?: string; page?: Page; permission?: Permission }[] = [
   { label: 'Activity', path: '/', page: 'activity' },
   { label: 'History', path: '/history', page: 'history' },
   { label: 'Statistics', path: '/stats', page: 'stats' },
   { label: 'Users', path: '/users', page: 'users' },
   { label: 'Libraries', path: '/libraries', page: 'libraries' },
+  { label: 'Moderation', path: '/moderation', page: 'moderation', permission: 'moderate' },
 ];
 
 export function App() {
+  return (
+    <ModerationProvider>
+      <Shell />
+    </ModerationProvider>
+  );
+}
+
+function Shell() {
   const { pathname } = useLocation();
+  const { can } = useAuth();
+  const { openFlags } = useModeration();
   const section = pathname.split('/')[1] ?? '';
-  const page: Page = (['history', 'stats', 'users', 'libraries', 'settings'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
+  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
   const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
 
   return (
@@ -35,7 +48,7 @@ export function App() {
             <span className="text-lg font-semibold tracking-tight">Almanac</span>
           </Link>
           <nav className="flex min-w-0 gap-1 overflow-x-auto text-sm" aria-label="Main">
-            {NAV.map((item) => {
+            {NAV.filter((item) => !item.permission || can(item.permission)).map((item) => {
               if (!item.path) {
                 return (
                   <span
@@ -58,6 +71,15 @@ export function App() {
                   }`}
                 >
                   {item.label}
+                  {item.page === 'moderation' && openFlags.open > 0 && (
+                    <span
+                      className="ml-1.5 rounded-full bg-panel-raised px-1.5 py-px text-[11px] font-semibold tabular-nums text-ink"
+                      style={openFlags.openHigh ? { boxShadow: 'inset 0 0 0 1px #d03b3b' } : undefined}
+                      title={`${openFlags.open} flags to review${openFlags.openHigh ? `, ${openFlags.openHigh} serious` : ''}`}
+                    >
+                      {openFlags.open}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -72,6 +94,7 @@ export function App() {
         {page === 'users' && (userId ? <UserPage key={userId} userId={userId} /> : <UsersPage />)}
         {page === 'libraries' && <LibrariesPage />}
         {page === 'settings' && <SettingsPage />}
+        {page === 'moderation' && (can('moderate') ? <ModerationPage /> : <ActivityPage />)}
         {page === 'activity' && <ActivityPage />}
       </main>
     </div>

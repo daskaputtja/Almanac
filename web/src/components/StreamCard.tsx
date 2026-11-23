@@ -12,13 +12,16 @@ import {
 } from '../lib/format';
 import { Link } from '../lib/router';
 import { MethodBadge } from './MethodBadge';
+import { UserTags } from './UserTags';
 
 interface Props {
   stream: ActivityStream;
   position: number;
+  /** How many different networks this user is streaming from right now. */
+  liveNetworks?: number;
 }
 
-export function StreamCard({ stream, position }: Props) {
+export function StreamCard({ stream, position, liveNetworks = 1 }: Props) {
   const { title, subtitle } = titleLines(stream);
   const duration = stream.media.durationSeconds;
   const percent = duration ? Math.min(100, (position / duration) * 100) : 0;
@@ -50,6 +53,20 @@ export function StreamCard({ stream, position }: Props) {
             </Link>
             {stream.user.profileName && stream.user.profileName !== 'Main' && (
               <span className="text-ink-faint"> · {stream.user.profileName}</span>
+            )}{' '}
+            <UserTags userId={stream.user.id} />
+            {liveNetworks > 1 && (
+              <span
+                className="ml-1 inline-flex items-center gap-1 rounded-md border border-line bg-canvas px-1.5 py-px align-middle text-[10px] font-semibold text-ink"
+                title="This account is streaming from several different networks right now"
+              >
+                <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke={liveNetworks >= 3 ? '#d03b3b' : '#fab219'} strokeWidth="1.8" aria-hidden="true">
+                  <circle cx="4" cy="8" r="2.5" />
+                  <circle cx="12" cy="4" r="2.5" />
+                  <circle cx="12" cy="12" r="2.5" />
+                </svg>
+                On {liveNetworks} networks now
+              </span>
             )}
           </p>
 

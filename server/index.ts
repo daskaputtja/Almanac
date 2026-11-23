@@ -12,6 +12,7 @@ import { type CatalogSource, type HistorySource, type SessionSource, SiloClient 
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from './silo/mock.js';
 import { StatsService } from './stats/stats.js';
 import { UsersService } from './users/users.js';
+import { ModerationService } from './moderation/service.js';
 
 let config;
 try {
@@ -66,7 +67,25 @@ if (!auth.hasUsers() && config.bootstrapUser) {
   }
 }
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library });
+// Account flags: re-checked every 5 minutes, using the week's history and what's playing now.
+const moderation = new ModerationService(db);
+const runModerationChecks = () => {
+  try {
+    const live = new Map<string, { ip: string | null; player: string | null }[]>();
+    for (const s of monitor.current().streams) {
+      const list = live.get(s.user.id) ?? [];
+      list.push({ ip: s.client.ip, player: s.client.name });
+      live.set(s.user.id, list);
+    }
+    moderation.refresh(live);
+  } catch (err) {
+    console.error(`Account checks failed: ${err instanceof Error ? err.message : err}`);
+  }
+};
+setTimeout(runModerationChecks, 15_000).unref();
+const moderationTimer = setInterval(runModerationChecks, 5 * 60_000);
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -83,6 +102,7 @@ function shutdown() {
   monitor.stop();
   historySync.stop();
   catalogSync.stop();
+  clearInterval(moderationTimer);
   server.close(() => {
     db.close();
     process.exit(0);
