@@ -59,13 +59,21 @@ export function StatsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Statistics</h1>
-        <p className="text-sm text-ink-muted">
-          {selectedUser ? `${selectedUser.name}’s viewing` : 'Everyone’s viewing'},{' '}
-          {filters.period === 'all' ? 'all time' : `last ${PERIODS[filters.period]!.label}`}. Plays under {SHORT_PLAY_SECONDS}{' '}
-          seconds aren’t counted.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Statistics</h1>
+          <p className="text-sm text-ink-muted">
+            {selectedUser ? `${selectedUser.name}’s viewing` : 'Everyone’s viewing'},{' '}
+            {filters.period === 'all' ? 'all time' : `last ${PERIODS[filters.period]!.label}`}. Plays under {SHORT_PLAY_SECONDS}{' '}
+            seconds aren’t counted.
+          </p>
+        </div>
+        <Link
+          to={`/recap?year=${new Date().getFullYear()}`}
+          className="rounded-lg border border-harvest-dim bg-harvest/10 px-3 py-1.5 text-sm font-medium hover:bg-harvest/20"
+        >
+          {new Date().getFullYear()} recap
+        </Link>
       </div>
 
       {/* Filters: one row, scoping everything below. */}

@@ -18,6 +18,7 @@ import type { HistorySync } from './history/sync.js';
 import type { LibraryService } from './library/library.js';
 import { type Actor, ModerationError, type ModerationService } from './moderation/service.js';
 import type { ServerOverviewService } from './server/overview.js';
+import { RecapError, type RecapService } from './recap/recap.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -31,6 +32,7 @@ export interface AppServices {
   library: LibraryService;
   moderation: ModerationService;
   overview: ServerOverviewService;
+  recap: RecapService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -93,7 +95,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -156,6 +158,17 @@ export function createApp(
   );
 
   app.get('/api/server/overview', (c) => c.json(overview.overview()));
+
+  app.get('/api/recap', (c) => {
+    const year = Number(c.req.query('year') ?? new Date().getUTCFullYear());
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) return c.json({ error: 'Choose a year.' }, 400);
+    try {
+      return c.json(recap.get(year, c.req.query('user') || null));
+    } catch (err) {
+      if (err instanceof RecapError) return c.json({ error: err.message }, 404);
+      throw err;
+    }
+  });
 
   app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()), { includeIp: seesIps(c) })));
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));

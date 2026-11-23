@@ -12,6 +12,7 @@ import { LibraryService } from '../server/library/library.js';
 import { CatalogSync } from '../server/library/sync.js';
 import { ModerationService } from '../server/moderation/service.js';
 import { ServerOverviewService } from '../server/server/overview.js';
+import { RecapService } from '../server/recap/recap.js';
 import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
@@ -102,6 +103,7 @@ function makeApp() {
       library: new LibraryService(db, catalogSync),
       moderation: new ModerationService(db),
       overview: new ServerOverviewService(db, new MockServerSource()),
+      recap: new RecapService(db),
     },
   );
   return { app, auth, db, history, monitor };
@@ -444,6 +446,14 @@ describe('roles', () => {
     expect(saved.status).toBe(200);
     expect((saved.json!.thresholds as Record<string, unknown>).concurrentNetworks).toEqual({ enabled: true, medium: 4, high: 5 });
     expect(saved.json!.updatedBy).toBe('alex');
+  });
+
+  it('shows recaps to signed-in admins and mods', async () => {
+    const { app, admin, mod } = await withMod();
+    expect((await client(app).get('/api/recap?year=2026')).status).toBe(401);
+    expect((await mod.get('/api/recap?year=2026')).status).toBe(200);
+    expect((await admin.get('/api/recap?year=2026&user=nobody')).status).toBe(404);
+    expect((await admin.get('/api/recap?year=12')).status).toBe(400);
   });
 
   it('keeps account management for admins', async () => {

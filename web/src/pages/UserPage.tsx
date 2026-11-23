@@ -93,6 +93,12 @@ export function UserPage({ userId }: { userId: string }) {
               <h1 className="text-2xl font-semibold">{user.name}</h1>
               <RoleBadges role={user.role} isOwner={user.isOwner} enabled={user.enabled} inSilo={user.inSilo} />
               <UserTags userId={user.id} />
+              <Link
+                to={`/users/${encodeURIComponent(user.id)}/recap?year=${new Date().getFullYear()}`}
+                className="ml-1 rounded-lg border border-harvest-dim bg-harvest/10 px-2.5 py-1 text-xs font-medium hover:bg-harvest/20"
+              >
+                {new Date().getFullYear()} recap
+              </Link>
             </div>
             <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-muted">
               {user.createdAt && <Fact label="Member since" value={new Date(user.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })} />}

@@ -61,15 +61,21 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
 - *Mark as reviewed* with a note; a reviewed flag reopens if the behaviour gets clearly worse
 - "On 3 networks now" badges on Activity while it's happening
+- **Adjustable thresholds** (admins, in Settings): turn checks on or off and change their levels, with a live preview of how many accounts would be flagged
 - Shared **notes** and **tags** on any user (for example VIP, Family, Warned), with tags shown next to their name everywhere
 
 Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and all private addresses count as one home network), so phones changing address don't cause flags. Mods see the counts and evidence but never the addresses.
 
+### Yearly recap ✅
+- A "year in review" for each user and for the whole server: hours watched, plays, movies, episodes and active days
+- Top shows and movies with posters, favourite genre, watch time by month and a heatmap of when they watch
+- Fun facts: biggest binge, longest sitting, longest daily streak, busiest day, favourite device, first play of the year
+- How a user compares with everyone else that year, and the server's biggest viewers and titles added
+- Open it from the Statistics page or any user's page
+
 ### Later
 - Notifications to Discord and other services
 - Recently added newsletters
-- A yearly recap for each user
-- Rules for streams, such as stream limits or transcode policies
 
 ## How it works
 
@@ -214,10 +220,11 @@ server/            The Almanac server (Hono on Node.js)
   activity/        Turning Silo sessions into Almanac's activity view
   history/         Storing play history and syncing it from Silo
   stats/           Statistics calculated from the play history
+  recap/           The yearly recap
   users/           Accounts combined with their play history
   library/         Copying Silo's catalog and the Libraries page's queries
   auth/            Accounts, passwords, two-factor codes, sessions and sign-in routes
-  moderation/      Account flag checks (detect.ts holds the thresholds), notes and tags
+  moderation/      Account flag checks, notes and tags (default thresholds are in shared/moderation.ts)
   cli.ts           The almanac-cli recovery tool
   db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard

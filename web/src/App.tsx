@@ -7,12 +7,13 @@ import { LibrariesPage } from './pages/LibrariesPage';
 import { StatsPage } from './pages/StatsPage';
 import { UserPage } from './pages/UserPage';
 import { ModerationPage } from './pages/ModerationPage';
+import { RecapPage } from './pages/RecapPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ModerationProvider, useModeration } from './lib/moderation';
 import { UsersPage } from './pages/UsersPage';
 import { Link, useLocation } from './lib/router';
 
-type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings';
+type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings' | 'recap';
 
 const NAV: { label: string; path?: string; page?: Page; permission?: Permission }[] = [
   { label: 'Activity', path: '/', page: 'activity' },
@@ -36,8 +37,9 @@ function Shell() {
   const { can } = useAuth();
   const { openFlags } = useModeration();
   const section = pathname.split('/')[1] ?? '';
-  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
+  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings', 'recap'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
   const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
+  const userRecap = page === 'users' && pathname.split('/')[3] === 'recap';
 
   return (
     <div className="min-h-screen">
@@ -60,7 +62,7 @@ function Shell() {
                   </span>
                 );
               }
-              const active = item.page === page;
+              const active = item.page === page || (page === 'recap' && item.page === 'stats');
               return (
                 <Link
                   key={item.label}
@@ -91,7 +93,9 @@ function Shell() {
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
         {page === 'history' && <HistoryPage />}
         {page === 'stats' && <StatsPage />}
-        {page === 'users' && (userId ? <UserPage key={userId} userId={userId} /> : <UsersPage />)}
+        {page === 'users' &&
+          (userId ? userRecap ? <RecapPage key={`recap-${userId}`} userId={userId} /> : <UserPage key={userId} userId={userId} /> : <UsersPage />)}
+        {page === 'recap' && <RecapPage />}
         {page === 'libraries' && <LibrariesPage />}
         {page === 'settings' && <SettingsPage />}
         {page === 'moderation' && (can('moderate') ? <ModerationPage /> : <ActivityPage />)}
