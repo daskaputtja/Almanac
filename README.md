@@ -120,6 +120,8 @@ sudo bash install-almanac.sh
 
 It asks for Almanac's address, your Silo address and the API key, then prints the setup code for step 3. Before running it, point a DNS **A record** for Almanac's address at the server.
 
+To update later, run `sudo almanac-update`. It downloads the latest version and restarts Almanac in about a minute, keeping your settings, accounts and history. The installer can also set it to update itself every night. If you installed by hand, run `docker compose pull && docker compose up -d` instead.
+
 **Or by hand** with Docker Compose:
 
 ```yaml

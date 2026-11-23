@@ -12,6 +12,7 @@
 #   - starts it and shows the setup code for your first sign-in
 #
 # Running it again is safe: it keeps your data and updates Almanac.
+# Afterwards, `sudo almanac-update` updates Almanac without any questions.
 
 set -euo pipefail
 
@@ -53,6 +54,10 @@ else
   read -r -s -p "Silo API key (admin:monitor:read + libraries:read, starts with sa_): " SILO_API_KEY; echo
 fi
 [ -n "$SILO_API_KEY" ] || fail "An API key is needed."
+
+if [ -f /etc/systemd/system/almanac-update.timer ]; then auto_default=Y; else auto_default=N; fi
+read -r -p "Update Almanac automatically every night? [y/n, default $auto_default]: " AUTO_UPDATE
+AUTO_UPDATE=${AUTO_UPDATE:-$auto_default}
 
 echo
 
@@ -186,6 +191,50 @@ else
   ok "Built the image."
 fi
 
+# --- Update command ------------------------------------------------------------
+
+bold "Setting up updates"
+if [ -f "$INSTALL_DIR/src/deploy/update.sh" ]; then
+  install -m 755 "$INSTALL_DIR/src/deploy/update.sh" /usr/local/bin/almanac-update
+else
+  curl -fsSL https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/update.sh -o /usr/local/bin/almanac-update
+  chmod 755 /usr/local/bin/almanac-update
+fi
+ok "Update any time with: sudo almanac-update"
+
+if [[ "$AUTO_UPDATE" =~ ^[Yy] ]] && command -v systemctl >/dev/null 2>&1; then
+  cat > /etc/systemd/system/almanac-update.service <<'UNIT'
+[Unit]
+Description=Update Almanac
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/almanac-update --quiet
+UNIT
+  cat > /etc/systemd/system/almanac-update.timer <<'UNIT'
+[Unit]
+Description=Update Almanac every night
+
+[Timer]
+OnCalendar=*-*-* 04:00
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now almanac-update.timer >/dev/null 2>&1
+  ok "Almanac will update itself every night around 4am (server time)."
+elif [ -f /etc/systemd/system/almanac-update.timer ]; then
+  systemctl disable --now almanac-update.timer >/dev/null 2>&1 || true
+  rm -f /etc/systemd/system/almanac-update.timer /etc/systemd/system/almanac-update.service
+  systemctl daemon-reload
+  ok "Nightly updates turned off."
+fi
+
 # --- Start ---------------------------------------------------------------------
 
 bold "Starting Almanac"
@@ -221,7 +270,8 @@ echo
 info "First start: the catalog copies in a few minutes, and play history imports over about half an hour."
 info "Useful commands (from $INSTALL_DIR):"
 info "  docker logs -f almanac                    see what it's doing"
-info "  docker compose pull && docker compose up -d   update (or run this installer again)"
+info "  sudo almanac-update                        update to the latest version"
+info "  journalctl -u almanac-update              what the nightly updates did"
 info "  docker exec -it almanac almanac-cli users     account recovery"
 
 if command -v ufw >/dev/null 2>&1 && ! ufw status 2>/dev/null | grep -q "Status: active"; then
