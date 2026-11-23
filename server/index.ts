@@ -5,9 +5,12 @@ import { loadConfig } from './config.js';
 import { type Database, openDatabase } from './db/database.js';
 import { HistoryStore } from './history/store.js';
 import { HistorySync } from './history/sync.js';
-import { type HistorySource, type SessionSource, SiloClient } from './silo/client.js';
-import { MockHistorySource, MockSessionSource } from './silo/mock.js';
+import { LibraryService } from './library/library.js';
+import { CatalogSync } from './library/sync.js';
+import { type CatalogSource, type HistorySource, type SessionSource, SiloClient } from './silo/client.js';
+import { MockCatalogSource, MockHistorySource, MockSessionSource } from './silo/mock.js';
 import { StatsService } from './stats/stats.js';
+import { UsersService } from './users/users.js';
 
 let config;
 try {
@@ -20,6 +23,7 @@ try {
 const silo = config.mock ? null : new SiloClient(config.siloUrl, config.siloApiKey);
 const sessionSource: SessionSource = silo ?? new MockSessionSource();
 const historySource: HistorySource = silo ?? new MockHistorySource();
+const catalogSource: CatalogSource = silo ?? new MockCatalogSource();
 
 let db: Database;
 try {
@@ -44,8 +48,13 @@ monitor.subscribe((snapshot) => {
 });
 monitor.start();
 
+const catalogSync = new CatalogSync(db, catalogSource, { intervalMs: config.catalogSyncIntervalMs });
+catalogSync.start();
+
 const stats = new StatsService(db);
-const app = createApp(config, { monitor, history, historySync, stats });
+const users = new UsersService(db);
+const library = new LibraryService(db, catalogSync);
+const app = createApp(config, { monitor, history, historySync, stats, users, library });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -58,6 +67,7 @@ const server = serve({ fetch: app.fetch, port: config.port, hostname: config.hos
 function shutdown() {
   monitor.stop();
   historySync.stop();
+  catalogSync.stop();
   server.close(() => {
     db.close();
     process.exit(0);

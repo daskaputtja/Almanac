@@ -1,21 +1,26 @@
 import { ActivityPage } from './pages/ActivityPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { LibrariesPage } from './pages/LibrariesPage';
 import { StatsPage } from './pages/StatsPage';
+import { UserPage } from './pages/UserPage';
+import { UsersPage } from './pages/UsersPage';
 import { Link, useLocation } from './lib/router';
 
-type Page = 'activity' | 'history' | 'stats';
+type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries';
 
 const NAV: { label: string; path?: string; page?: Page }[] = [
   { label: 'Activity', path: '/', page: 'activity' },
   { label: 'History', path: '/history', page: 'history' },
   { label: 'Statistics', path: '/stats', page: 'stats' },
-  { label: 'Users' },
-  { label: 'Libraries' },
+  { label: 'Users', path: '/users', page: 'users' },
+  { label: 'Libraries', path: '/libraries', page: 'libraries' },
 ];
 
 export function App() {
   const { pathname } = useLocation();
-  const page: Page = pathname.startsWith('/history') ? 'history' : pathname.startsWith('/stats') ? 'stats' : 'activity';
+  const section = pathname.split('/')[1] ?? '';
+  const page: Page = (['history', 'stats', 'users', 'libraries'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
+  const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
 
   return (
     <div className="min-h-screen">
@@ -57,7 +62,11 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
-        {page === 'history' ? <HistoryPage /> : page === 'stats' ? <StatsPage /> : <ActivityPage />}
+        {page === 'history' && <HistoryPage />}
+        {page === 'stats' && <StatsPage />}
+        {page === 'users' && (userId ? <UserPage key={userId} userId={userId} /> : <UsersPage />)}
+        {page === 'libraries' && <LibrariesPage />}
+        {page === 'activity' && <ActivityPage />}
       </main>
     </div>
   );

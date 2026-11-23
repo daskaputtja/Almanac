@@ -1,4 +1,14 @@
-import type { HistoryPageQuery, SiloCollection, SiloHistoryEntry, SiloProblem, SiloSession } from './types.js';
+import type {
+  CatalogPageQuery,
+  HistoryPageQuery,
+  SiloCatalogItem,
+  SiloCollection,
+  SiloHistoryEntry,
+  SiloLibrary,
+  SiloProblem,
+  SiloSession,
+  SiloUser,
+} from './types.js';
 
 export class SiloError extends Error {
   constructor(
@@ -20,10 +30,18 @@ export interface HistorySource {
   listHistoryPage(query: HistoryPageQuery): Promise<SiloCollection<SiloHistoryEntry>>;
 }
 
+/** Where Almanac gets accounts, libraries and the catalog from. */
+export interface CatalogSource {
+  listUsers(): Promise<SiloUser[]>;
+  /** Library names. Throws a 403 SiloError when the key lacks `libraries:read`. */
+  listLibraries(): Promise<SiloLibrary[]>;
+  listCatalogPage(query: CatalogPageQuery): Promise<SiloCollection<SiloCatalogItem>>;
+}
+
 const PAGE_SIZE = 200; // Silo's maximum
 const MAX_PAGES = 50; // stop runaway paging if a cursor never ends
 
-export class SiloClient implements SessionSource, HistorySource {
+export class SiloClient implements SessionSource, HistorySource, CatalogSource {
   private readonly baseUrl: string;
 
   constructor(
@@ -96,6 +114,45 @@ export class SiloClient implements SessionSource, HistorySource {
       limit: query.limit ?? PAGE_SIZE,
       cursor: query.cursor,
       ended_after: query.endedAfter,
+    });
+  }
+
+  async listUsers(): Promise<SiloUser[]> {
+    const users: SiloUser[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 500; page++) {
+      const result = await this.get<SiloCollection<SiloUser>>('/api/v2/admin/users', { limit: PAGE_SIZE, cursor });
+      // Keep only what Almanac needs; Silo also returns emails and policies.
+      for (const u of result.items) {
+        users.push({
+          id: u.id,
+          username: u.username,
+          role: u.role,
+          enabled: u.enabled,
+          is_owner: u.is_owner,
+          created_at: u.created_at,
+          last_active_at: u.last_active_at,
+        });
+      }
+      cursor = result.page?.has_more ? result.page.next_cursor : undefined;
+      if (!cursor) break;
+    }
+    return users;
+  }
+
+  async listLibraries(): Promise<SiloLibrary[]> {
+    const result = await this.get<SiloCollection<SiloLibrary> | SiloLibrary[]>('/api/v2/user/libraries');
+    const items = Array.isArray(result) ? result : result.items;
+    return items.map((l) => ({ id: String(l.id), name: l.name, type: l.type, sort_order: l.sort_order }));
+  }
+
+  /** One page of the catalog. Cursors are bound to the filters, so repeat them. */
+  listCatalogPage(query: CatalogPageQuery): Promise<SiloCollection<SiloCatalogItem>> {
+    return this.get<SiloCollection<SiloCatalogItem>>('/api/v2/admin/catalog/items', {
+      limit: query.limit ?? PAGE_SIZE,
+      type: query.type,
+      added_after: query.addedAfter,
+      cursor: query.cursor,
     });
   }
 }

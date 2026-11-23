@@ -133,3 +133,62 @@ export interface HistoryPageQuery {
   endedAfter?: string;
   limit?: number;
 }
+
+/** An account from `GET /api/v2/admin/users`. Only the fields Almanac keeps. */
+export interface SiloUser {
+  id: string;
+  username: string;
+  role?: string;
+  enabled?: boolean;
+  is_owner?: boolean;
+  created_at?: string;
+  last_active_at?: string | null;
+}
+
+/** A library from `GET /api/v2/user/libraries` (needs the `libraries:read` scope). */
+export interface SiloLibrary {
+  id: string;
+  name: string;
+  type?: string;
+  sort_order?: number;
+}
+
+export interface SiloCatalogVersion {
+  file_id?: string;
+  library_id?: string;
+  resolution?: string;
+  codec_video?: string;
+  codec_audio?: string;
+  dynamic_range?: string;
+  audio_channels?: number;
+  bitrate_kbps?: number;
+  file_size?: number;
+  container?: string;
+  atmos?: boolean;
+}
+
+/** A movie, series or episode from `GET /api/v2/admin/catalog/items`. */
+export interface SiloCatalogItem {
+  content_id: string;
+  type: 'movie' | 'series' | 'episode' | string;
+  title: string;
+  year?: number;
+  series_id?: string;
+  series_title?: string;
+  season_number?: number;
+  episode_number?: number;
+  library_ids?: string[];
+  added_at: string;
+  poster_url?: string;
+  genres?: string[];
+  rating_imdb?: number;
+  rating_tmdb?: number;
+  versions?: SiloCatalogVersion[];
+}
+
+export interface CatalogPageQuery {
+  type: 'movie' | 'series' | 'episode';
+  addedAfter?: string;
+  cursor?: string;
+  limit?: number;
+}

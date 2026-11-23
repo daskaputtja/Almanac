@@ -10,6 +10,7 @@ import {
   reasonLabel,
   titleLines,
 } from '../lib/format';
+import { Link } from '../lib/router';
 import { MethodBadge } from './MethodBadge';
 
 interface Props {
@@ -44,7 +45,9 @@ export function StreamCard({ stream, position }: Props) {
           </div>
 
           <p className="mt-1 truncate text-sm">
-            <span className="font-medium text-harvest">{stream.user.name}</span>
+            <Link to={`/users/${encodeURIComponent(stream.user.id)}`} className="font-medium text-harvest hover:underline">
+              {stream.user.name}
+            </Link>
             {stream.user.profileName && stream.user.profileName !== 'Main' && (
               <span className="text-ink-faint"> · {stream.user.profileName}</span>
             )}

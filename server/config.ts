@@ -8,6 +8,7 @@ export interface Config {
   mock: boolean;
   pollIntervalMs: number;
   historySyncIntervalMs: number;
+  catalogSyncIntervalMs: number;
   databasePath: string;
   auth: { username: string; password: string } | null;
   webRoot: string;
@@ -39,6 +40,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const historySeconds = Number(env.HISTORY_SYNC_SECONDS ?? 60);
   if (!Number.isFinite(historySeconds) || historySeconds < 10) problems.push('HISTORY_SYNC_SECONDS must be at least 10.');
 
+  const catalogMinutes = Number(env.CATALOG_SYNC_MINUTES ?? 5);
+  if (!Number.isFinite(catalogMinutes) || catalogMinutes < 1) problems.push('CATALOG_SYNC_MINUTES must be at least 1.');
+
   const username = env.ALMANAC_USERNAME ?? '';
   const password = env.ALMANAC_PASSWORD ?? '';
   if (Boolean(username) !== Boolean(password)) {
@@ -57,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mock,
     pollIntervalMs: pollSeconds * 1000,
     historySyncIntervalMs: historySeconds * 1000,
+    catalogSyncIntervalMs: catalogMinutes * 60_000,
     // Demo data gets its own database so it never mixes with real history.
     databasePath: join(env.DATA_DIR ?? 'data', mock ? 'almanac-demo.db' : 'almanac.db'),
     auth: username ? { username, password } : null,

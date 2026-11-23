@@ -1,4 +1,5 @@
 import type { StatsRankBy, TopEntry } from '../../../shared/stats';
+import { Link } from '../lib/router';
 import { formatHours } from '../lib/statsData';
 
 interface Props {
@@ -6,11 +7,13 @@ interface Props {
   entries: TopEntry[];
   rankBy: StatsRankBy;
   formatName?: (entry: TopEntry) => string;
+  /** Make each name a link, e.g. to a user's page. */
+  linkTo?: (entry: TopEntry) => string;
   emptyText?: string;
 }
 
 /** A ranked top-N list with one bar per entry, all in one colour. */
-export function TopList({ title, entries, rankBy, formatName = (e) => e.name, emptyText = 'Nothing yet' }: Props) {
+export function TopList({ title, entries, rankBy, formatName = (e) => e.name, linkTo, emptyText = 'Nothing yet' }: Props) {
   const metric = (e: TopEntry) => (rankBy === 'watched' ? e.watchedSeconds : e.plays);
   const max = Math.max(1, ...entries.map(metric));
 
@@ -24,17 +27,24 @@ export function TopList({ title, entries, rankBy, formatName = (e) => e.name, em
           {entries.map((e, i) => {
             // Some players don't report watch time; say so instead of showing "0 min".
             const watched = e.watchedSeconds > 0 ? formatHours(e.watchedSeconds) : 'not measured';
-            const primary = rankBy === 'watched' ? watched : `${e.plays.toLocaleString()} plays`;
-            const secondary = rankBy === 'watched' ? `${e.plays.toLocaleString()} plays` : watched;
+            const plays = `${e.plays.toLocaleString()} ${e.plays === 1 ? 'play' : 'plays'}`;
+            const primary = rankBy === 'watched' ? watched : plays;
+            const secondary = rankBy === 'watched' ? plays : watched;
             return (
               <li key={e.key} className="grid grid-cols-[1.25rem_1fr] gap-x-2">
                 <span className="pt-px text-right text-xs tabular-nums text-ink-faint">{i + 1}</span>
                 <div className="min-w-0">
                   <div className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="min-w-0">
-                      <span className="block truncate" title={formatName(e)}>
-                        {formatName(e)}
-                      </span>
+                      {linkTo ? (
+                        <Link to={linkTo(e)} className="block truncate hover:text-harvest hover:underline" title={formatName(e)}>
+                          {formatName(e)}
+                        </Link>
+                      ) : (
+                        <span className="block truncate" title={formatName(e)}>
+                          {formatName(e)}
+                        </span>
+                      )}
                       {e.detail && <span className="block truncate text-xs text-ink-faint">{e.detail}</span>}
                     </span>
                     <span className="shrink-0 tabular-nums">

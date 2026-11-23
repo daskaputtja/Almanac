@@ -5,13 +5,17 @@
 Almanac is a self-hosted companion dashboard for Silo. It shows who is watching what right now, keeps a permanent record of every play, and turns that history into stats and graphs.
 
 > [!WARNING]
-> Almanac is in early development. The Activity, History and Statistics pages work; everything else is still planned. Silo itself is pre-release, and its API may change before 1.0.
+> Almanac is in early development. Silo itself is pre-release, and its API may change before 1.0. Silo itself is pre-release, and its API may change before 1.0.
 
 ![The Almanac Activity page, showing live streams with demo data](docs/activity.png)
 
 ![The Almanac History page, showing past plays with demo data](docs/history.png)
 
 ![The Almanac Statistics page, showing charts and top lists with demo data](docs/statistics.png)
+
+![A user's page in Almanac, with demo data](docs/user.png)
+
+![The Almanac Libraries page, with demo data](docs/libraries.png)
 
 ## Features
 
@@ -38,12 +42,15 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - Top shows, movies, users, platforms and players, ranked by plays or by watch time
 - For the last 7, 30 or 90 days, the last year or all time, for everyone or one user
 
-### Users (planned)
-- A page for each user showing their watch time, habits, devices and recent plays
+### Users ✅
+- Every account, combining Silo's details (role, enabled, member since, last active) with plays, watch time, last watched, top platform and direct-play share
+- Search, sort, and filter by recent activity or disabled accounts
+- A page for each user: what they're watching now, their charts and top titles, recent plays, and the players, IP addresses and profiles they use
 
-### Library (planned)
-- Recently added media
-- Per-library counts and file details
+### Libraries ✅
+- Every library with its movie or show count, items added this week and plays in the last 30 days
+- A poster grid of recently added movies and shows, with new episodes grouped by show and 4K and HDR badges
+- Filter by library, movies or shows, and the last 7 or 30 days
 
 ### Later
 - Notifications to Discord and other services
@@ -56,6 +63,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 Almanac connects to Silo with a read-only API key owned by a Silo administrator.
 
 - **Activity:** every few seconds Almanac asks Silo for the current playback sessions and pushes changes to open dashboards straight away.
+- **Users and libraries:** every few minutes Almanac refreshes Silo's account list and library names and fetches newly added items. Every 12 hours it re-reads all movies and shows. The first copy of a large catalog takes a few minutes.
 - **History:** Almanac copies Silo's play history into its own SQLite database. The first start imports everything Silo has, newest first. On a busy server this can take a while, and the History page shows progress as it goes. After that, Almanac fetches new plays every minute, and within seconds of a stream ending.
 
 ```
@@ -71,7 +79,7 @@ Silo server ──REST API──▶ Almanac server       │──live updates�
 
 1. Log in to Silo as an administrator.
 2. Open the API keys section of the admin settings.
-3. Create a key called `Almanac` with only the **`admin:monitor:read`** scope. This makes it read-only.
+3. Create a key called `Almanac` with only the **`admin:monitor:read`** and **`libraries:read`** scopes. Both are read-only. Without `libraries:read`, everything works but libraries show as numbers instead of names.
 4. Copy the key, which starts with `sa_`. Silo only shows it once.
 
 ### 2. Run Almanac with Docker
@@ -108,6 +116,7 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | `PORT` | No | `8191` | The port Almanac listens on |
 | `POLL_INTERVAL_SECONDS` | No | `5` | How often to ask Silo for activity |
 | `HISTORY_SYNC_SECONDS` | No | `60` | How often to fetch new plays from Silo |
+| `CATALOG_SYNC_MINUTES` | No | `5` | How often to refresh accounts, libraries and newly added items |
 | `DATA_DIR` | No | `data` (`/data` in Docker) | Where Almanac keeps its database |
 | `SILO_MOCK` | No | `false` | Set to `true` to show made-up demo data instead of a real server |
 
@@ -140,6 +149,8 @@ server/            The Almanac server (Hono on Node.js)
   activity/        Turning Silo sessions into Almanac's activity view
   history/         Storing play history and syncing it from Silo
   stats/           Statistics calculated from the play history
+  users/           Accounts combined with their play history
+  library/         Copying Silo's catalog and the Libraries page's queries
   db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard
 web/               The dashboard (React, Vite, Tailwind)

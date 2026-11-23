@@ -19,7 +19,7 @@ import {
   formatWhen,
   platformLabel,
 } from '../lib/format';
-import { navigate, useLocation } from '../lib/router';
+import { Link, navigate, useLocation } from '../lib/router';
 
 const PAGE_SIZE = 50;
 const SHORT_PLAY_SECONDS = 30;
@@ -348,7 +348,13 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
         {formatWhen(entry.endedAt)}
       </td>
       <td className="max-w-[10rem] truncate px-3 py-2.5">
-        <span className="font-medium text-harvest">{entry.user.name}</span>
+        <Link
+          to={`/users/${encodeURIComponent(entry.user.id)}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-medium text-harvest hover:underline"
+        >
+          {entry.user.name}
+        </Link>
         {entry.user.profileName && entry.user.profileName !== 'Main' && (
           <span className="text-ink-faint"> · {entry.user.profileName}</span>
         )}

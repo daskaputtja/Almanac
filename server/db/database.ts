@@ -62,6 +62,55 @@ const MIGRATIONS: string[] = [
     CREATE INDEX plays_started_at ON plays (started_at);
     CREATE INDEX plays_user_started_at ON plays (user_id, started_at);
   `,
+  /* 4: Silo accounts, libraries and catalog */ `
+    CREATE TABLE silo_users (
+      id             TEXT PRIMARY KEY,
+      username       TEXT NOT NULL,
+      role           TEXT,
+      enabled        INTEGER,
+      is_owner       INTEGER,
+      created_at     TEXT,
+      last_active_at TEXT,
+      synced_at      TEXT NOT NULL
+    );
+
+    CREATE TABLE libraries (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      type       TEXT,
+      sort_order INTEGER,
+      synced_at  TEXT NOT NULL
+    );
+
+    -- Movies and series are a full copy of Silo's catalog; episodes are kept
+    -- only while recent, for the recently added feed.
+    CREATE TABLE catalog_items (
+      content_id     TEXT PRIMARY KEY,
+      type           TEXT NOT NULL,
+      title          TEXT NOT NULL,
+      year           INTEGER,
+      series_id      TEXT,
+      series_title   TEXT,
+      season_number  INTEGER,
+      episode_number INTEGER,
+      library_ids    TEXT NOT NULL,
+      added_at       TEXT NOT NULL,
+      poster_url     TEXT,
+      genres         TEXT,
+      rating_imdb    REAL,
+      rating_tmdb    REAL,
+      resolution     TEXT,
+      dynamic_range  TEXT,
+      codec_video    TEXT,
+      file_size      INTEGER,
+      synced_at      TEXT NOT NULL
+    );
+    CREATE INDEX catalog_type_added ON catalog_items (type, added_at DESC);
+    CREATE INDEX catalog_series ON catalog_items (series_id);
+  `,
+  /* 5: plays per library match episodes to shows by title */ `
+    CREATE INDEX IF NOT EXISTS catalog_type_title ON catalog_items (type, title);
+  `,
 ];
 
 export type Database = DatabaseSync;

@@ -1,5 +1,14 @@
-import type { HistorySource, SessionSource } from './client.js';
-import type { HistoryPageQuery, SiloCollection, SiloHistoryEntry, SiloSession } from './types.js';
+import type { CatalogSource, HistorySource, SessionSource } from './client.js';
+import type {
+  CatalogPageQuery,
+  HistoryPageQuery,
+  SiloCatalogItem,
+  SiloCollection,
+  SiloHistoryEntry,
+  SiloLibrary,
+  SiloSession,
+  SiloUser,
+} from './types.js';
 
 /**
  * A fake Silo server for development and screenshots, enabled with
@@ -185,6 +194,88 @@ export class MockHistorySource implements HistorySource {
     const matching = query.endedAfter
       ? this.entries.filter((e) => e.ended_at >= query.endedAfter!)
       : this.entries;
+    const items = matching.slice(offset, offset + limit);
+    const hasMore = offset + limit < matching.length;
+    return { items, page: { has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : undefined } };
+  }
+}
+
+const MOCK_LIBRARIES = [
+  { id: '1', name: 'Movies', type: 'movies', sort_order: 1 },
+  { id: '2', name: 'TV Shows', type: 'shows', sort_order: 2 },
+  { id: '3', name: '4K Movies', type: 'movies', sort_order: 3 },
+];
+
+const EXTRA_MOVIES = [
+  'Glass Lanterns', 'The Salt Road', 'Kettle Hill', 'Northbound', 'A Field of Clocks', 'Driftwood Kings',
+  'The Cartographer', 'Seven Bridges', 'Halfway House', 'Copper Sky', 'The Night Ferry', 'Thimble',
+];
+const EXTRA_SERIES = ['Weather Station', 'The Orchard Years', 'Lighthouse Keepers', 'Market Day'];
+
+/** Made-up accounts, libraries and catalog for demo mode. */
+export class MockCatalogSource implements CatalogSource {
+  private readonly items: SiloCatalogItem[];
+
+  constructor(private readonly now = Date.now()) {
+    const random = seededRandom(7);
+    const daysAgo = (max: number) => new Date(now - random() * max * 86_400_000).toISOString();
+    const quality = () => {
+      const fourK = random() < 0.3;
+      return [{ resolution: fourK ? '2160p' : random() < 0.8 ? '1080p' : '720p', codec_video: fourK ? 'hevc' : 'h264', dynamic_range: fourK && random() < 0.6 ? 'HDR10' : 'SDR', file_size: Math.round((fourK ? 40 : 8) * 1e9 * (0.5 + random())) }];
+    };
+
+    const movieTitles = [...new Set([...TEMPLATES.filter((t) => t.type === 'movie').map((t) => t.title), ...EXTRA_MOVIES])];
+    const movies = movieTitles.map((title, i): SiloCatalogItem => {
+      const versions = quality();
+      return {
+        content_id: `mock-movie-${i + 1}`,
+        type: 'movie',
+        title,
+        year: 1990 + Math.floor(random() * 36),
+        library_ids: versions[0]!.resolution === '2160p' ? ['3'] : ['1'],
+        added_at: daysAgo(i < 6 ? 10 : 400),
+        genres: [['Drama'], ['Comedy'], ['Thriller'], ['Adventure', 'Family']][i % 4],
+        rating_imdb: Math.round((5 + random() * 4) * 10) / 10,
+        versions,
+      };
+    });
+
+    const seriesTitles = [...new Set([...TEMPLATES.filter((t) => t.series).map((t) => t.series!), ...EXTRA_SERIES])];
+    const series: SiloCatalogItem[] = [];
+    const episodes: SiloCatalogItem[] = [];
+    seriesTitles.forEach((title, i) => {
+      const id = `mock-series-${i + 1}`;
+      series.push({ content_id: id, type: 'series', title, year: 2010 + i, library_ids: ['2'], added_at: daysAgo(500), genres: ['Drama'], rating_imdb: 7 + (i % 3) / 2, versions: [] });
+      const newEpisodes = i % 2 === 0 ? 1 + Math.floor(random() * 5) : 0;
+      for (let e = 0; e < newEpisodes; e++) {
+        episodes.push({ content_id: `${id}-s2e${e + 1}`, type: 'episode', title: `Episode ${e + 1}`, series_id: id, series_title: title, season_number: 2, episode_number: e + 1, library_ids: ['2'], added_at: daysAgo(14), versions: quality() });
+      }
+    });
+
+    this.items = [...movies, ...series, ...episodes];
+  }
+
+  async listUsers(): Promise<SiloUser[]> {
+    const names = [...new Set(TEMPLATES.map((t) => t.user)), 'quill'];
+    return names.map((username, i) => ({
+      id: String(100 + i),
+      username,
+      role: i === 0 ? 'admin' : 'user',
+      enabled: username !== 'quill',
+      is_owner: i === 0,
+      created_at: new Date(this.now - (400 - i * 30) * 86_400_000).toISOString(),
+      last_active_at: new Date(this.now - i * 3_600_000).toISOString(),
+    }));
+  }
+
+  async listLibraries(): Promise<SiloLibrary[]> {
+    return MOCK_LIBRARIES;
+  }
+
+  async listCatalogPage(query: CatalogPageQuery): Promise<SiloCollection<SiloCatalogItem>> {
+    const limit = query.limit ?? 200;
+    const offset = query.cursor ? Number(query.cursor) : 0;
+    const matching = this.items.filter((i) => i.type === query.type && (!query.addedAfter || i.added_at >= query.addedAfter));
     const items = matching.slice(offset, offset + limit);
     const hasMore = offset + limit < matching.length;
     return { items, page: { has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : undefined } };

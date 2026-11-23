@@ -9,13 +9,17 @@ import type { Config } from './config.js';
 import type { StatsQuery } from '../shared/stats.js';
 import type { HistoryStore } from './history/store.js';
 import type { HistorySync } from './history/sync.js';
+import type { LibraryService } from './library/library.js';
 import type { StatsService } from './stats/stats.js';
+import type { UsersService } from './users/users.js';
 
 export interface AppServices {
   monitor: ActivityMonitor;
   history: HistoryStore;
   historySync: HistorySync;
   stats: StatsService;
+  users: UsersService;
+  library: LibraryService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -67,7 +71,10 @@ export function parseStatsQuery(params: Record<string, string | undefined>): Sta
   };
 }
 
-export function createApp(config: Pick<Config, 'auth' | 'webRoot'>, { monitor, history, historySync, stats }: AppServices) {
+export function createApp(
+  config: Pick<Config, 'auth' | 'webRoot'>,
+  { monitor, history, historySync, stats, users, library }: AppServices,
+) {
   const app = new Hono();
 
   // Health checks stay open so Docker can probe the container.
@@ -104,6 +111,27 @@ export function createApp(config: Pick<Config, 'auth' | 'webRoot'>, { monitor, h
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
   app.get('/api/history/status', (c) => c.json(historySync.status()));
   app.get('/api/stats', (c) => c.json(stats.get(parseStatsQuery(c.req.query()))));
+
+  app.get('/api/users', (c) => c.json({ users: users.list() }));
+  app.get('/api/users/:id', (c) => {
+    const user = users.get(c.req.param('id'));
+    return user ? c.json(user) : c.json({ error: 'No such user' }, 404);
+  });
+
+  app.get('/api/libraries', (c) => c.json(library.libraries()));
+  app.get('/api/libraries/recent', (c) => {
+    const q = c.req.query();
+    const days = Number(q.days);
+    const limit = Number(q.limit);
+    return c.json({
+      items: library.recent({
+        libraryId: q.library || undefined,
+        kind: q.kind === 'movie' || q.kind === 'show' ? q.kind : undefined,
+        days: Number.isFinite(days) && days > 0 ? days : undefined,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : undefined,
+      }),
+    });
+  });
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 
