@@ -281,7 +281,13 @@ export class MockCatalogSource implements CatalogSource {
   async listCatalogPage(query: CatalogPageQuery): Promise<SiloCollection<SiloCatalogItem>> {
     const limit = query.limit ?? 200;
     const offset = query.cursor ? Number(query.cursor) : 0;
-    const matching = this.items.filter((i) => i.type === query.type && (!query.addedAfter || i.added_at >= query.addedAfter));
+    const matching = this.items.filter(
+      (i) =>
+        (!query.type || i.type === query.type) &&
+        (!query.addedAfter || i.added_at >= query.addedAfter) &&
+        (!query.libraryId || (i.library_ids ?? []).includes(query.libraryId)) &&
+        (!query.contentIds || query.contentIds.includes(i.content_id)),
+    );
     const items = matching.slice(offset, offset + limit);
     const hasMore = offset + limit < matching.length;
     return { items, page: { has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : undefined } };

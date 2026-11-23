@@ -81,8 +81,17 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - **Nodes:** each Silo node with its status, version, streams and bandwidth
 - **Transcode doctor:** why streams are being converted, which players and files cause it most, and suggestions for fixing it
 
+### Discord notifications ✅ (admins)
+- Newly added movies and episodes posted to Discord, with a separate webhook for each channel and any mix of libraries per channel
+- Only post 4K, HDR or Dolby Vision copies, so a Dolby Vision channel can watch your 4K libraries
+- A 4K copy of an existing movie counts as new in the 4K library
+- Posters, summaries, ratings, runtime, quality (resolution, HDR, audio, edition) and links, from TMDB for movies and TVDB for shows (free keys, entered on the page). Without keys, posts use Silo's details
+- A show's new episodes are grouped into one post; a big import becomes one summary instead of hundreds of posts
+- Waits a little for Silo to match a new file, so posts have the right title and poster
+- A test button, a log of recent posts, and channels turn themselves off (with a note) if their webhook is deleted
+
 ### Later
-- Notifications to Discord and other services
+- Notifications for other events and services
 - Recently added newsletters
 
 ## How it works
@@ -247,6 +256,7 @@ server/            The Almanac server (Hono on Node.js)
   transcodes/      The transcode doctor
   trending/        Trending titles
   geo/             Looking up where viewers are
+  notify/          Discord posts for recently added, and TMDB/TVDB lookups
   users/           Accounts combined with their play history
   library/         Copying Silo's catalog and the Libraries page's queries
   auth/            Accounts, passwords, two-factor codes, sessions and sign-in routes

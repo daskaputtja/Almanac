@@ -25,6 +25,9 @@ import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
 import { ShareError, type RecapShares } from './recap/shares.js';
 import type { GeoService } from './geo/geo.js';
+import { MetadataError, type MetadataService } from './notify/metadata.js';
+import { NotifyError, type Notifier } from './notify/notifier.js';
+import type { NotifyChannelInput } from '../shared/notifications.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -44,6 +47,8 @@ export interface AppServices {
   trending: TrendingService;
   shares: RecapShares;
   geo: GeoService;
+  notifier: Notifier;
+  metadata: MetadataService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -106,7 +111,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -264,6 +269,7 @@ export function createApp(
   app.use('/api/moderation/*', requirePermission('moderate'));
   app.onError((err, c) => {
     if (err instanceof ModerationError) return c.json({ error: err.message }, err.status);
+    if (err instanceof NotifyError || err instanceof MetadataError) return c.json({ error: err.message }, 400);
     console.error(err);
     return c.json({ error: 'Something went wrong.' }, 500);
   });
@@ -331,6 +337,36 @@ export function createApp(
   app.post('/api/moderation/users/:id/tags', async (c) => {
     const tags = (await jsonBody(c)).tags;
     return c.json({ tags: moderation.setTags(c.req.param('id'), actor(c), Array.isArray(tags) ? tags : []) });
+  });
+
+  // Discord notifications: admins only. Webhook addresses and API keys never leave the server.
+  const notifications = requirePermission('manageNotifications');
+  const channelInput = (body: Record<string, unknown>): NotifyChannelInput => ({
+    name: typeof body.name === 'string' ? body.name : undefined,
+    webhookUrl: typeof body.webhookUrl === 'string' ? body.webhookUrl : undefined,
+    libraryIds: Array.isArray(body.libraryIds) ? body.libraryIds.map(String) : undefined,
+    quality: typeof body.quality === 'string' ? (body.quality as NotifyChannelInput['quality']) : undefined,
+    enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+  });
+  const optionalText = (value: unknown) => (value === undefined ? undefined : typeof value === 'string' ? value : null);
+  app.get('/api/notifications', notifications, (c) => c.json(notifier.overview()));
+  app.post('/api/notifications/channels', notifications, async (c) => {
+    const channel = notifier.create(channelInput(await jsonBody(c)), c.get('session').user.username);
+    return c.json(channel, 201);
+  });
+  app.post('/api/notifications/channels/:id', notifications, async (c) => c.json(notifier.update(c.req.param('id'), channelInput(await jsonBody(c)))));
+  app.post('/api/notifications/channels/:id/delete', notifications, (c) => {
+    notifier.remove(c.req.param('id'));
+    return c.json({ ok: true });
+  });
+  app.post('/api/notifications/channels/:id/test', notifications, async (c) => c.json(await notifier.test(c.req.param('id'))));
+  app.post('/api/notifications/keys', notifications, async (c) => {
+    const body = await jsonBody(c);
+    const keys = await metadata.setKeys(
+      { tmdb: optionalText(body.tmdb), tvdb: optionalText(body.tvdb), tvdbPin: optionalText(body.tvdbPin) },
+      c.get('session').user.username,
+    );
+    return c.json({ keys });
   });
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

@@ -167,6 +167,8 @@ export interface SiloCatalogVersion {
   file_size?: number;
   container?: string;
   atmos?: boolean;
+  /** For example "IMAX", "Extended" or "Directors Cut". */
+  edition?: string;
 }
 
 /** A movie, series or episode from `GET /api/v2/admin/catalog/items`. */
@@ -186,11 +188,23 @@ export interface SiloCatalogItem {
   rating_imdb?: number;
   rating_tmdb?: number;
   versions?: SiloCatalogVersion[];
+  /** "matched" once Silo has found the title's metadata. */
+  status?: string;
+  imdb_id?: string;
+  tmdb_id?: string;
+  tvdb_id?: string;
+  content_rating?: string;
+  release_date?: string;
+  air_date?: string;
 }
 
 export interface CatalogPageQuery {
-  type: 'movie' | 'series' | 'episode';
+  type?: 'movie' | 'series' | 'episode';
   addedAfter?: string;
+  /** Only items in this library; added_at is then when the item first appeared in it. */
+  libraryId?: string;
+  /** Only these items. */
+  contentIds?: string[];
   cursor?: string;
   limit?: number;
 }

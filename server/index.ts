@@ -14,6 +14,8 @@ import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
 import { RecapShares } from './recap/shares.js';
 import { GeoService } from './geo/geo.js';
+import { MetadataService } from './notify/metadata.js';
+import { Notifier } from './notify/notifier.js';
 import { dirname } from 'node:path';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
@@ -116,7 +118,12 @@ const recap = new RecapService(db);
 const geo = new GeoService(db, dirname(config.databasePath));
 if (config.geolocation) geo.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo });
+// Recently added posts to Discord, with TMDB and TVDB details when keys are set.
+const metadata = new MetadataService(db);
+const notifier = new Notifier(db, catalogSource, metadata);
+notifier.start();
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -137,6 +144,7 @@ function shutdown() {
   overview.stop();
   load.stop();
   geo.stop();
+  notifier.stop();
   server.close(() => {
     db.close();
     process.exit(0);

@@ -67,10 +67,11 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
     this.baseUrl = baseUrl.replace(/\/+$/, '');
   }
 
-  async get<T>(path: string, query: Record<string, string | number | undefined> = {}): Promise<T> {
+  async get<T>(path: string, query: Record<string, string | number | string[] | undefined> = {}): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined) url.searchParams.set(key, String(value));
+      if (Array.isArray(value)) for (const v of value) url.searchParams.append(key, v);
+      else if (value !== undefined) url.searchParams.set(key, String(value));
     }
 
     let res: Response;
@@ -167,6 +168,8 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
       limit: query.limit ?? PAGE_SIZE,
       type: query.type,
       added_after: query.addedAfter,
+      library_id: query.libraryId,
+      content_ids: query.contentIds,
       cursor: query.cursor,
     });
   }

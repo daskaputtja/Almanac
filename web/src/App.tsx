@@ -7,6 +7,7 @@ import { LibrariesPage } from './pages/LibrariesPage';
 import { StatsPage } from './pages/StatsPage';
 import { UserPage } from './pages/UserPage';
 import { ModerationPage } from './pages/ModerationPage';
+import { NotificationsPage } from './pages/NotificationsPage';
 import { RecapPage } from './pages/RecapPage';
 import { ServerPage } from './pages/ServerPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -14,7 +15,7 @@ import { ModerationProvider, useModeration } from './lib/moderation';
 import { UsersPage } from './pages/UsersPage';
 import { Link, useLocation } from './lib/router';
 
-type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings' | 'recap' | 'server';
+type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'notifications' | 'settings' | 'recap' | 'server';
 
 const NAV: { label: string; path?: string; page?: Page; permission?: Permission }[] = [
   { label: 'Activity', path: '/', page: 'activity' },
@@ -24,6 +25,7 @@ const NAV: { label: string; path?: string; page?: Page; permission?: Permission 
   { label: 'Libraries', path: '/libraries', page: 'libraries' },
   { label: 'Server', path: '/server', page: 'server' },
   { label: 'Moderation', path: '/moderation', page: 'moderation', permission: 'moderate' },
+  { label: 'Notifications', path: '/notifications', page: 'notifications', permission: 'manageNotifications' },
 ];
 
 export function App() {
@@ -39,7 +41,7 @@ function Shell() {
   const { can } = useAuth();
   const { openFlags } = useModeration();
   const section = pathname.split('/')[1] ?? '';
-  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings', 'recap', 'server'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
+  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'notifications', 'settings', 'recap', 'server'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
   const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
   const userRecap = page === 'users' && pathname.split('/')[3] === 'recap';
 
@@ -102,6 +104,7 @@ function Shell() {
         {page === 'libraries' && <LibrariesPage />}
         {page === 'settings' && <SettingsPage />}
         {page === 'moderation' && (can('moderate') ? <ModerationPage /> : <ActivityPage />)}
+        {page === 'notifications' && (can('manageNotifications') ? <NotificationsPage /> : <ActivityPage />)}
         {page === 'activity' && <ActivityPage />}
       </main>
     </div>

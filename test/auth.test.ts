@@ -6,6 +6,13 @@ import { FailureLimiter } from '../server/auth/rateLimit.js';
 import { AuthService } from '../server/auth/service.js';
 import { base32Decode, base32Encode, codeAt, currentStep, verifyCode } from '../server/auth/totp.js';
 import { openDatabase } from '../server/db/database.js';
+import { MetadataService } from '../server/notify/metadata.js';
+import { Notifier } from '../server/notify/notifier.js';
+
+/** Tests never talk to Discord, TMDB or TVDB. */
+const failingFetch = async () => {
+  throw new Error('no network in tests');
+};
 import { HistoryStore } from '../server/history/store.js';
 import { HistorySync } from '../server/history/sync.js';
 import { LibraryService } from '../server/library/library.js';
@@ -115,6 +122,8 @@ function makeApp() {
       trending: new TrendingService(db),
       shares: new RecapShares(db, new RecapService(db)),
       geo: new GeoService(db, tmpdir(), () => {}),
+      notifier: new Notifier(db, new MockCatalogSource(), new MetadataService(db, failingFetch), { fetchImpl: failingFetch, log: () => {} }),
+      metadata: new MetadataService(db, failingFetch),
     },
   );
   return { app, auth, db, history, monitor };
@@ -500,6 +509,30 @@ describe('roles', () => {
     expect((await mod.get('/api/stats/map')).status).toBe(200);
     expect((await mod.get('/api/stats/map')).json!.cities).toEqual([]);
     expect((await admin.get('/api/stats/map')).status).toBe(200);
+  });
+
+  it('keeps Discord notifications for admins, and never shows webhook secrets', async () => {
+    const { admin, mod } = await withMod();
+    expect((await mod.get('/api/notifications')).status).toBe(403);
+    expect((await mod.post('/api/notifications/keys', { tmdb: 'x' })).status).toBe(403);
+    expect((await admin.get('/api/notifications')).status).toBe(200);
+
+    const secret = 'S3cretWebhookTokenPart_abcdefghijklmnop';
+    const created = await admin.post('/api/notifications/channels', {
+      name: '#4k-movies',
+      webhookUrl: `https://discord.com/api/webhooks/123456789012345678/${secret}`,
+      libraryIds: ['3'],
+      quality: 'dolby_vision',
+    });
+    expect(created.status).toBe(201);
+    expect(created.json).toMatchObject({ name: '#4k-movies', webhookHint: 'discord.com/api/webhooks/…5678', quality: 'dolby_vision' });
+    const listed = await admin.get('/api/notifications');
+    expect(JSON.stringify(listed.json)).not.toContain(secret);
+    expect((await mod.post(`/api/notifications/channels/${created.json!.id}/delete`)).status).toBe(403);
+
+    const bad = await admin.post('/api/notifications/channels', { name: 'x', webhookUrl: 'https://evil.example/api/webhooks/1/2', libraryIds: ['3'] });
+    expect(bad.status).toBe(400);
+    expect(bad.json!.error).toMatch(/Discord webhook/);
   });
 
   it('keeps account management for admins', async () => {

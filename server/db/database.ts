@@ -264,6 +264,39 @@ const MIGRATIONS: string[] = [
       looked_up_at TEXT NOT NULL
     );
   `,
+  /* 14: Discord channels for recently added, and what's been posted to them */ `
+    CREATE TABLE notify_channels (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      webhook_url   TEXT NOT NULL,
+      library_ids   TEXT NOT NULL,   -- JSON array of Silo library IDs
+      quality       TEXT NOT NULL DEFAULT 'any',
+      enabled       INTEGER NOT NULL DEFAULT 1,
+      active_since  TEXT NOT NULL,   -- only items added after this are posted
+      created_by    TEXT,
+      created_at    TEXT NOT NULL,
+      last_sent_at  TEXT,
+      last_error    TEXT,
+      last_error_at TEXT
+    );
+    CREATE TABLE notify_items (
+      channel_id  TEXT NOT NULL,
+      content_id  TEXT NOT NULL,
+      library_id  TEXT NOT NULL,
+      kind        TEXT NOT NULL,     -- movie or episode
+      series_id   TEXT,
+      title       TEXT NOT NULL,
+      added_at    TEXT NOT NULL,
+      detected_at TEXT NOT NULL,
+      item_json   TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'pending',
+      attempts    INTEGER NOT NULL DEFAULT 0,
+      sent_at     TEXT,
+      error       TEXT,
+      PRIMARY KEY (channel_id, content_id)
+    );
+    CREATE INDEX notify_items_status ON notify_items (status, detected_at);
+  `,
 ];
 
 export type Database = DatabaseSync;
