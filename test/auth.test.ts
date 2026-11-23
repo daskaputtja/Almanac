@@ -11,6 +11,8 @@ import { HistorySync } from '../server/history/sync.js';
 import { LibraryService } from '../server/library/library.js';
 import { CatalogSync } from '../server/library/sync.js';
 import { ModerationService } from '../server/moderation/service.js';
+import { ServerOverviewService } from '../server/server/overview.js';
+import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
 import { UsersService } from '../server/users/users.js';
@@ -99,6 +101,7 @@ function makeApp() {
       users: new UsersService(db),
       library: new LibraryService(db, catalogSync),
       moderation: new ModerationService(db),
+      overview: new ServerOverviewService(db, new MockServerSource()),
     },
   );
   return { app, auth, db, history, monitor };

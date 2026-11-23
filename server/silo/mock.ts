@@ -1,4 +1,4 @@
-import type { CatalogSource, HistorySource, SessionSource } from './client.js';
+import type { CatalogSource, HistorySource, ServerSource, SessionSource } from './client.js';
 import type {
   CatalogPageQuery,
   HistoryPageQuery,
@@ -6,7 +6,10 @@ import type {
   SiloCollection,
   SiloHistoryEntry,
   SiloLibrary,
+  SiloNodeSummary,
+  SiloServerStatus,
   SiloSession,
+  SiloSystemInfo,
   SiloUser,
 } from './types.js';
 
@@ -279,5 +282,26 @@ export class MockCatalogSource implements CatalogSource {
     const items = matching.slice(offset, offset + limit);
     const hasMore = offset + limit < matching.length;
     return { items, page: { has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : undefined } };
+  }
+}
+
+/** A healthy made-up server for demo mode. */
+export class MockServerSource implements ServerSource {
+  private readonly startedAt = new Date(Date.now() - 18 * 3_600_000 - 16 * 60_000).toISOString();
+
+  async serverStatus(): Promise<SiloServerStatus> {
+    return {
+      started_at: this.startedAt,
+      restart_required: false,
+      health: { postgres: { configured: true, ok: true, latency_ms: 0.03 }, redis: { configured: true, ok: true, latency_ms: 0.11 } },
+    };
+  }
+
+  async nodes(): Promise<SiloNodeSummary[]> {
+    return Array.from({ length: 4 }, (_, i) => ({ id: String(i + 1), name: `node-${i + 1}`, enabled: true, healthy: true }));
+  }
+
+  async systemInfo(): Promise<SiloSystemInfo> {
+    return { server_version: 'demo1234' };
   }
 }

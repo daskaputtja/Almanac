@@ -20,6 +20,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 ## Features
 
 ### Live activity ✅
+- A server overview at the top: profiles that watched in the last 24 hours, total movies and shows, and Silo's version, uptime, Postgres and Redis health and nodes
 - Every active stream on one page, with poster, user, player, IP address and live progress
 - Totals for streams, playback methods and bandwidth
 - Search, filter by playback method, and sort

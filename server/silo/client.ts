@@ -5,7 +5,10 @@ import type {
   SiloCollection,
   SiloHistoryEntry,
   SiloLibrary,
+  SiloNodeSummary,
   SiloProblem,
+  SiloServerStatus,
+  SiloSystemInfo,
   SiloSession,
   SiloUser,
 } from './types.js';
@@ -38,10 +41,17 @@ export interface CatalogSource {
   listCatalogPage(query: CatalogPageQuery): Promise<SiloCollection<SiloCatalogItem>>;
 }
 
+/** Where Almanac gets server health for the Activity page's overview. */
+export interface ServerSource {
+  serverStatus(): Promise<SiloServerStatus>;
+  nodes(): Promise<SiloNodeSummary[]>;
+  systemInfo(): Promise<SiloSystemInfo>;
+}
+
 const PAGE_SIZE = 200; // Silo's maximum
 const MAX_PAGES = 50; // stop runaway paging if a cursor never ends
 
-export class SiloClient implements SessionSource, HistorySource, CatalogSource {
+export class SiloClient implements SessionSource, HistorySource, CatalogSource, ServerSource {
   private readonly baseUrl: string;
 
   constructor(
@@ -154,5 +164,19 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource {
       added_after: query.addedAfter,
       cursor: query.cursor,
     });
+  }
+
+  serverStatus(): Promise<SiloServerStatus> {
+    return this.get<SiloServerStatus>('/api/v2/admin/server/status');
+  }
+
+  async nodes(): Promise<SiloNodeSummary[]> {
+    const result = await this.get<SiloCollection<SiloNodeSummary>>('/api/v2/admin/nodes/summary');
+    // The summary also carries detailed resource readings; keep only what we use.
+    return result.items.map((n) => ({ id: n.id, name: n.name, enabled: n.enabled, healthy: n.healthy }));
+  }
+
+  systemInfo(): Promise<SiloSystemInfo> {
+    return this.get<SiloSystemInfo>('/api/v2/system/info');
   }
 }

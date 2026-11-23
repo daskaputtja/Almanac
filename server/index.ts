@@ -9,7 +9,8 @@ import { HistorySync } from './history/sync.js';
 import { LibraryService } from './library/library.js';
 import { CatalogSync } from './library/sync.js';
 import { type CatalogSource, type HistorySource, type SessionSource, SiloClient } from './silo/client.js';
-import { MockCatalogSource, MockHistorySource, MockSessionSource } from './silo/mock.js';
+import { MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSource } from './silo/mock.js';
+import { ServerOverviewService } from './server/overview.js';
 import { StatsService } from './stats/stats.js';
 import { UsersService } from './users/users.js';
 import { ModerationService } from './moderation/service.js';
@@ -85,7 +86,10 @@ const runModerationChecks = () => {
 setTimeout(runModerationChecks, 15_000).unref();
 const moderationTimer = setInterval(runModerationChecks, 5 * 60_000);
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation });
+const overview = new ServerOverviewService(db, silo ?? new MockServerSource());
+overview.start();
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -103,6 +107,7 @@ function shutdown() {
   historySync.stop();
   catalogSync.stop();
   clearInterval(moderationTimer);
+  overview.stop();
   server.close(() => {
     db.close();
     process.exit(0);

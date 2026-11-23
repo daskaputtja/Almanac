@@ -192,3 +192,26 @@ export interface CatalogPageQuery {
   cursor?: string;
   limit?: number;
 }
+
+/** From `GET /api/v2/admin/server/status`. */
+export interface SiloServerStatus {
+  started_at?: string;
+  restart_required?: boolean;
+  health?: {
+    postgres?: { configured?: boolean; ok?: boolean; latency_ms?: number };
+    redis?: { configured?: boolean; ok?: boolean; latency_ms?: number };
+  };
+}
+
+/** One node from `GET /api/v2/admin/nodes/summary` (only the fields Almanac reads). */
+export interface SiloNodeSummary {
+  id: string;
+  name?: string;
+  enabled?: boolean;
+  healthy?: boolean;
+}
+
+/** From `GET /api/v2/system/info`. */
+export interface SiloSystemInfo {
+  server_version?: string;
+}

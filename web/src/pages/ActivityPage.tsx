@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ActivityStream, PlayMethod } from '../../../shared/activity';
 import { METHOD_STYLES } from '../components/MethodBadge';
+import { ServerOverview } from '../components/ServerOverview';
 import { StreamCard } from '../components/StreamCard';
 import { SummaryTiles } from '../components/SummaryTiles';
 import { PLAY_METHOD_LABELS, livePosition, titleLines } from '../lib/format';
@@ -76,6 +77,7 @@ export function ActivityPage() {
         </Banner>
       )}
 
+      <ServerOverview />
       {!neverConnected && <SummaryTiles summary={snapshot.summary} />}
 
       {snapshot.streams.length > 0 && (

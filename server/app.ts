@@ -16,6 +16,7 @@ import type { HistoryStore } from './history/store.js';
 import type { HistorySync } from './history/sync.js';
 import type { LibraryService } from './library/library.js';
 import { type Actor, ModerationError, type ModerationService } from './moderation/service.js';
+import type { ServerOverviewService } from './server/overview.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -28,6 +29,7 @@ export interface AppServices {
   users: UsersService;
   library: LibraryService;
   moderation: ModerationService;
+  overview: ServerOverviewService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -90,7 +92,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -151,6 +153,8 @@ export function createApp(
       unsubscribe();
     }),
   );
+
+  app.get('/api/server/overview', (c) => c.json(overview.overview()));
 
   app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()), { includeIp: seesIps(c) })));
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
