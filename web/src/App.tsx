@@ -8,12 +8,13 @@ import { StatsPage } from './pages/StatsPage';
 import { UserPage } from './pages/UserPage';
 import { ModerationPage } from './pages/ModerationPage';
 import { RecapPage } from './pages/RecapPage';
+import { ServerPage } from './pages/ServerPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ModerationProvider, useModeration } from './lib/moderation';
 import { UsersPage } from './pages/UsersPage';
 import { Link, useLocation } from './lib/router';
 
-type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings' | 'recap';
+type Page = 'activity' | 'history' | 'stats' | 'users' | 'libraries' | 'moderation' | 'settings' | 'recap' | 'server';
 
 const NAV: { label: string; path?: string; page?: Page; permission?: Permission }[] = [
   { label: 'Activity', path: '/', page: 'activity' },
@@ -21,6 +22,7 @@ const NAV: { label: string; path?: string; page?: Page; permission?: Permission 
   { label: 'Statistics', path: '/stats', page: 'stats' },
   { label: 'Users', path: '/users', page: 'users' },
   { label: 'Libraries', path: '/libraries', page: 'libraries' },
+  { label: 'Server', path: '/server', page: 'server' },
   { label: 'Moderation', path: '/moderation', page: 'moderation', permission: 'moderate' },
 ];
 
@@ -37,7 +39,7 @@ function Shell() {
   const { can } = useAuth();
   const { openFlags } = useModeration();
   const section = pathname.split('/')[1] ?? '';
-  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings', 'recap'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
+  const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'settings', 'recap', 'server'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
   const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
   const userRecap = page === 'users' && pathname.split('/')[3] === 'recap';
 
@@ -96,6 +98,7 @@ function Shell() {
         {page === 'users' &&
           (userId ? userRecap ? <RecapPage key={`recap-${userId}`} userId={userId} /> : <UserPage key={userId} userId={userId} /> : <UsersPage />)}
         {page === 'recap' && <RecapPage />}
+        {page === 'server' && <ServerPage />}
         {page === 'libraries' && <LibrariesPage />}
         {page === 'settings' && <SettingsPage />}
         {page === 'moderation' && (can('moderate') ? <ModerationPage /> : <ActivityPage />)}

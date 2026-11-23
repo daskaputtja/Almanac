@@ -13,6 +13,8 @@ import { CatalogSync } from '../server/library/sync.js';
 import { ModerationService } from '../server/moderation/service.js';
 import { ServerOverviewService } from '../server/server/overview.js';
 import { RecapService } from '../server/recap/recap.js';
+import { LoadHistory } from '../server/load/load.js';
+import { TranscodeDoctor } from '../server/transcodes/doctor.js';
 import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
@@ -104,6 +106,8 @@ function makeApp() {
       moderation: new ModerationService(db),
       overview: new ServerOverviewService(db, new MockServerSource()),
       recap: new RecapService(db),
+      load: new LoadHistory(db, new MockServerSource(), () => {}),
+      transcodes: new TranscodeDoctor(db),
     },
   );
   return { app, auth, db, history, monitor };

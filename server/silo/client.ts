@@ -5,11 +5,13 @@ import type {
   SiloCollection,
   SiloHistoryEntry,
   SiloLibrary,
+  SiloNodeDetail,
   SiloNodeSummary,
   SiloProblem,
   SiloServerStatus,
   SiloSystemInfo,
   SiloSession,
+  SiloTimeseries,
   SiloUser,
 } from './types.js';
 
@@ -46,6 +48,9 @@ export interface ServerSource {
   serverStatus(): Promise<SiloServerStatus>;
   nodes(): Promise<SiloNodeSummary[]>;
   systemInfo(): Promise<SiloSystemInfo>;
+  /** Load samples for the last `hours` hours (Silo keeps about 31 days). */
+  timeseries(hours: number): Promise<SiloTimeseries>;
+  nodeDetails(): Promise<SiloNodeDetail[]>;
 }
 
 const PAGE_SIZE = 200; // Silo's maximum
@@ -178,5 +183,34 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
 
   systemInfo(): Promise<SiloSystemInfo> {
     return this.get<SiloSystemInfo>('/api/v2/system/info');
+  }
+
+  timeseries(hours: number): Promise<SiloTimeseries> {
+    return this.get<SiloTimeseries>('/api/v2/admin/stats/timeseries', { hours: Math.min(744, Math.max(1, Math.round(hours))) });
+  }
+
+  async nodeDetails(): Promise<SiloNodeDetail[]> {
+    const result = await this.get<SiloCollection<SiloNodeDetail>>('/api/v2/admin/nodes/summary');
+    return result.items.map((n) => ({
+      id: n.id,
+      name: n.name,
+      type: n.type,
+      group: n.group,
+      enabled: n.enabled,
+      healthy: n.healthy,
+      active_jobs: n.active_jobs,
+      max_jobs: n.max_jobs,
+      egress_kbps: n.egress_kbps,
+      max_bandwidth_kbps: n.max_bandwidth_kbps,
+      drain_state: n.drain_state,
+      last_health_check: n.last_health_check,
+      resources: { system: n.resources?.system && {
+        cpu_pct: n.resources.system.cpu_pct,
+        cores: n.resources.system.cores,
+        load1: n.resources.system.load1,
+        mem_used_mb: n.resources.system.mem_used_mb,
+        mem_total_mb: n.resources.system.mem_total_mb,
+      } },
+    }));
   }
 }

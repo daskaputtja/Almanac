@@ -40,7 +40,9 @@ describe('ServerOverviewService', () => {
     const source: ServerSource = {
       serverStatus: () => (failing ? Promise.reject(new Error('timeout')) : mock.serverStatus()),
       nodes: () => mock.nodes(),
+      nodeDetails: () => mock.nodeDetails(),
       systemInfo: () => mock.systemInfo(),
+      timeseries: (hours) => mock.timeseries(hours),
     };
     const overview = new ServerOverviewService(db, source);
     await overview.refresh();

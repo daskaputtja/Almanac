@@ -48,6 +48,8 @@ export interface SiloSession {
   adaptation_reasons?: string[];
   reporting_node: string;
   node_display_name?: string;
+  routing_egress_node_name?: string;
+  routing_execution_node_name?: string;
   file_duration: number | null;
   started_at: string;
   updated_at: string;
@@ -214,4 +216,38 @@ export interface SiloNodeSummary {
 /** From `GET /api/v2/system/info`. */
 export interface SiloSystemInfo {
   server_version?: string;
+}
+
+/** From `GET /api/v2/admin/stats/timeseries`: one sample of server load. */
+export interface SiloLoadPoint {
+  t: string;
+  streams: number;
+  direct?: number;
+  remux?: number;
+  transcode?: number;
+  egress_kbps?: number;
+}
+
+export interface SiloTimeseries {
+  resolution_seconds: number;
+  points: SiloLoadPoint[];
+}
+
+/** One node from `GET /api/v2/admin/nodes/summary`, with the details the Nodes page shows. */
+export interface SiloNodeDetail {
+  id: string;
+  name?: string;
+  type?: string;
+  group?: string;
+  enabled?: boolean;
+  healthy?: boolean;
+  active_jobs?: number;
+  max_jobs?: number | null;
+  egress_kbps?: number;
+  max_bandwidth_kbps?: number | null;
+  drain_state?: string;
+  last_health_check?: string;
+  resources?: {
+    system?: { cpu_pct?: number; cores?: number; load1?: number; mem_used_mb?: number; mem_total_mb?: number };
+  };
 }

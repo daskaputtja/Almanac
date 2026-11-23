@@ -18,6 +18,9 @@ import type { HistorySync } from './history/sync.js';
 import type { LibraryService } from './library/library.js';
 import { type Actor, ModerationError, type ModerationService } from './moderation/service.js';
 import type { ServerOverviewService } from './server/overview.js';
+import type { LoadHistory } from './load/load.js';
+import type { TranscodeDoctor } from './transcodes/doctor.js';
+import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
@@ -33,6 +36,8 @@ export interface AppServices {
   moderation: ModerationService;
   overview: ServerOverviewService;
   recap: RecapService;
+  load: LoadHistory;
+  transcodes: TranscodeDoctor;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -95,7 +100,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -158,6 +163,22 @@ export function createApp(
   );
 
   app.get('/api/server/overview', (c) => c.json(overview.overview()));
+  app.get('/api/server/load', (c) => {
+    const range = c.req.query('range');
+    const key = (LOAD_RANGES.find((r) => r.key === range)?.key ?? '24h') as LoadRange['key'];
+    return c.json(load.load(key));
+  });
+  app.get('/api/server/transcodes', (c) => {
+    const days = Number(c.req.query('days'));
+    return c.json(transcodes.report([7, 30, 90].includes(days) ? days : 30));
+  });
+  app.get('/api/server/nodes', (c) => {
+    const streamsByNode = new Map<string, number>();
+    for (const s of monitor.current().streams) {
+      if (s.egressNode) streamsByNode.set(s.egressNode, (streamsByNode.get(s.egressNode) ?? 0) + 1);
+    }
+    return c.json(overview.nodeList(streamsByNode));
+  });
 
   app.get('/api/recap', (c) => {
     const year = Number(c.req.query('year') ?? new Date().getUTCFullYear());

@@ -200,6 +200,45 @@ const MIGRATIONS: string[] = [
       updated_at TEXT NOT NULL
     );
   `,
+  /* 10: server load samples copied from Silo, kept long after Silo drops them */ `
+    CREATE TABLE load_points (
+      t           INTEGER PRIMARY KEY,  -- unix seconds
+      resolution  INTEGER NOT NULL,     -- seconds the sample covers; finer replaces coarser
+      streams     REAL NOT NULL,
+      direct      REAL,
+      remux       REAL,
+      transcode   REAL,
+      egress_kbps REAL
+    );
+  `,
+  /* 11: details of live streams, for the transcode report (history doesn't say why) */ `
+    CREATE TABLE stream_observations (
+      session_id       TEXT PRIMARY KEY,
+      user_id          TEXT NOT NULL,
+      first_seen       TEXT NOT NULL,
+      last_seen        TEXT NOT NULL,
+      method           TEXT NOT NULL,
+      video_decision   TEXT,
+      audio_decision   TEXT,
+      reasons          TEXT NOT NULL,
+      media_type       TEXT,
+      title            TEXT,
+      series_title     TEXT,
+      item_id          TEXT,
+      file_id          TEXT,
+      source_video     TEXT,
+      source_resolution TEXT,
+      target_resolution TEXT,
+      source_audio     TEXT,
+      source_channels  INTEGER,
+      subtitle_codec   TEXT,
+      subtitle_delivery TEXT,
+      player           TEXT,
+      platform         TEXT,
+      hw_accel         TEXT
+    );
+    CREATE INDEX stream_observations_seen ON stream_observations (last_seen);
+  `,
 ];
 
 export type Database = DatabaseSync;

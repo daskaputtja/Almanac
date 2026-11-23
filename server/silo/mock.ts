@@ -6,10 +6,12 @@ import type {
   SiloCollection,
   SiloHistoryEntry,
   SiloLibrary,
+  SiloNodeDetail,
   SiloNodeSummary,
   SiloServerStatus,
   SiloSession,
   SiloSystemInfo,
+  SiloTimeseries,
   SiloUser,
 } from './types.js';
 
@@ -87,6 +89,7 @@ export class MockSessionSource implements SessionSource {
         adaptation_reasons: t.reasons,
         reporting_node: 'silo',
         node_display_name: 'Local server',
+        routing_egress_node_name: `node-${(i % 3) + 1}`,
         file_duration: t.duration,
         started_at: new Date(this.startedAt - offset * 1000).toISOString(),
         updated_at: new Date(now).toISOString(),
@@ -303,5 +306,38 @@ export class MockServerSource implements ServerSource {
 
   async systemInfo(): Promise<SiloSystemInfo> {
     return { server_version: 'demo1234' };
+  }
+
+  /** A daily rhythm: quiet before dawn, busiest in the evening. */
+  async timeseries(hours: number): Promise<SiloTimeseries> {
+    const resolution = hours <= 24 ? 300 : hours <= 168 ? 1800 : 7200;
+    const now = Math.floor(Date.now() / (resolution * 1000)) * resolution * 1000;
+    const count = Math.floor((hours * 3600) / resolution);
+    const points = Array.from({ length: count }, (_, i) => {
+      const t = now - (count - 1 - i) * resolution * 1000;
+      const hour = new Date(t).getUTCHours() + new Date(t).getUTCMinutes() / 60;
+      const curve = 0.5 + 0.5 * Math.sin(((hour - 14) / 24) * 2 * Math.PI);
+      const streams = Math.round(4 + 40 * curve + ((t / 60000) % 7));
+      const transcode = Math.round(streams * 0.12);
+      return { t: new Date(t).toISOString(), streams, direct: streams - transcode - 1, remux: 1, transcode, egress_kbps: streams * 9000 };
+    });
+    return { resolution_seconds: resolution, points };
+  }
+
+  async nodeDetails(): Promise<SiloNodeDetail[]> {
+    return Array.from({ length: 4 }, (_, i) => ({
+      id: String(i + 1),
+      name: `node-${i + 1}`,
+      type: i < 3 ? 'proxy' : 'transcode',
+      group: 'main',
+      enabled: true,
+      healthy: true,
+      active_jobs: [5, 2, 0, 3][i],
+      max_jobs: null,
+      egress_kbps: [42_000, 18_500, 0, 9_000][i],
+      drain_state: 'none',
+      last_health_check: new Date().toISOString(),
+      resources: { system: { cpu_pct: [12, 7, 2, 48][i], cores: 8, load1: [1.2, 0.6, 0.1, 3.9][i], mem_used_mb: [9_000, 6_200, 3_100, 14_000][i], mem_total_mb: 32_000 } },
+    }));
   }
 }

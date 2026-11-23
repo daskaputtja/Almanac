@@ -10,9 +10,24 @@ function hourLabel(hour: number): string {
  * Plays by weekday and hour in the viewer's time zone. One hue, faint for
  * few plays and bright for many (a sequential scale).
  */
-export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: string }) {
+export function WeekHourHeatmap({
+  grid,
+  label,
+  unit = 'plays',
+  share = true,
+}: {
+  grid: number[][];
+  label: string;
+  /** What the numbers are, e.g. "plays" or "streams on average". */
+  unit?: string;
+  /** Show each cell's share of the total (makes sense for counts, not averages). */
+  share?: boolean;
+}) {
   const [active, setActive] = useState<[number, number] | null>(null);
   const max = Math.max(1, ...grid.flat());
+  // For averages (share off), shade from the quietest to the busiest hour, so a
+  // server that's never empty still shows its rhythm.
+  const min = share ? 0 : Math.min(...grid.flat().filter((v) => v > 0), max);
   const total = grid.flat().reduce((a, b) => a + b, 0);
 
   const move = (dDay: number, dHour: number) =>
@@ -21,7 +36,7 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
       return current ? [Math.min(6, Math.max(0, d + dDay)), Math.min(23, Math.max(0, h + dHour))] : [0, 0];
     });
 
-  const shade = (value: number) => (value === 0 ? 0 : 0.12 + 0.88 * (value / max));
+  const shade = (value: number) => (value === 0 ? 0 : 0.12 + 0.88 * (max === min ? 1 : (value - min) / (max - min)));
   const activeValue = active ? grid[active[0]]![active[1]]! : 0;
 
   return (
@@ -78,10 +93,10 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
               transform: 'translateX(-50%)',
             }}
           >
-            <span className="font-semibold tabular-nums text-ink">{activeValue.toLocaleString()} plays</span>
+            <span className="font-semibold tabular-nums text-ink">{activeValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} {unit}</span>
             <span className="block text-ink-muted">
               {DAYS[active[0]]} {hourLabel(active[1])}–{hourLabel((active[1] + 1) % 24)}
-              {total > 0 && ` · ${((activeValue / total) * 100).toFixed(1)}%`}
+              {share && total > 0 && ` · ${((activeValue / total) * 100).toFixed(1)}%`}
             </span>
           </div>
         )}
@@ -97,7 +112,7 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
           ))}
         </span>
         More
-        <span className="ml-2">Busiest hour: {max.toLocaleString()} plays</span>
+        <span className="ml-2">Busiest hour: {max.toLocaleString(undefined, { maximumFractionDigits: 1 })} {unit}</span>
       </div>
     </div>
   );

@@ -12,6 +12,8 @@ import { type CatalogSource, type HistorySource, type SessionSource, SiloClient 
 import { MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSource } from './silo/mock.js';
 import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
+import { LoadHistory } from './load/load.js';
+import { TranscodeDoctor } from './transcodes/doctor.js';
 import { StatsService } from './stats/stats.js';
 import { UsersService } from './users/users.js';
 import { ModerationService } from './moderation/service.js';
@@ -87,12 +89,26 @@ const runModerationChecks = () => {
 setTimeout(runModerationChecks, 15_000).unref();
 const moderationTimer = setInterval(runModerationChecks, 5 * 60_000);
 
-const overview = new ServerOverviewService(db, silo ?? new MockServerSource());
+const serverSource = silo ?? new MockServerSource();
+const overview = new ServerOverviewService(db, serverSource);
 overview.start();
+const load = new LoadHistory(db, serverSource);
+load.start();
+
+// Record why live streams are converted (history doesn't keep it).
+const transcodes = new TranscodeDoctor(db);
+monitor.subscribe((snapshot) => {
+  if (snapshot.error) return;
+  try {
+    transcodes.record(snapshot.streams);
+  } catch (err) {
+    console.error(`Recording stream details failed: ${err instanceof Error ? err.message : err}`);
+  }
+});
 
 const recap = new RecapService(db);
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -111,6 +127,7 @@ function shutdown() {
   catalogSync.stop();
   clearInterval(moderationTimer);
   overview.stop();
+  load.stop();
   server.close(() => {
     db.close();
     process.exit(0);

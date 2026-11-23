@@ -58,6 +58,7 @@ export function toActivityStream(s: SiloSession): ActivityStream {
       seasonNumber: num(s.season_number),
       episodeNumber: num(s.episode_number),
       itemId: str(s.media_item_id),
+      fileId: str(s.media_file_id),
       posterUrl: str(s.poster_url),
       durationSeconds: num(s.file_duration),
     },
@@ -116,6 +117,7 @@ export function toActivityStream(s: SiloSession): ActivityStream {
       sourceKbps: num(s.source_bitrate_kbps),
     },
     node: str(s.node_display_name) ?? str(s.reporting_node),
+    egressNode: str(s.routing_egress_node_name) ?? str(s.routing_execution_node_name),
   };
 }
 

@@ -1,7 +1,8 @@
+import type { NodeInfo, NodesResponse } from '../../shared/load.js';
 import type { HealthCheck, ServerOverview } from '../../shared/server.js';
 import type { Database } from '../db/database.js';
 import type { ServerSource } from '../silo/client.js';
-import type { SiloNodeSummary, SiloServerStatus, SiloSystemInfo } from '../silo/types.js';
+import type { SiloNodeDetail, SiloServerStatus, SiloSystemInfo } from '../silo/types.js';
 
 const REFRESH_MS = 60_000;
 
@@ -12,7 +13,8 @@ const REFRESH_MS = 60_000;
  */
 export class ServerOverviewService {
   private status: SiloServerStatus | null = null;
-  private nodes: SiloNodeSummary[] | null = null;
+  private nodes: SiloNodeDetail[] | null = null;
+  private nodesAt: string | null = null;
   private info: SiloSystemInfo | null = null;
   private checkedAt: string | null = null;
   private problems: string[] = [];
@@ -44,12 +46,13 @@ export class ServerOverviewService {
     };
     const [status, nodes, info] = await Promise.all([
       attempt('Server status', () => this.source.serverStatus()),
-      attempt('Nodes', () => this.source.nodes()),
+      attempt('Nodes', () => this.source.nodeDetails()),
       attempt('Version', () => this.source.systemInfo()),
     ]);
     // Keep the last good answer for anything that failed this time.
     this.status = status ?? this.status;
     this.nodes = nodes ?? this.nodes;
+    if (nodes) this.nodesAt = new Date().toISOString();
     this.info = info ?? this.info;
     if (status || nodes || info) this.checkedAt = new Date().toISOString();
     this.problems = problems;
@@ -91,5 +94,32 @@ export class ServerOverviewService {
       checkedAt: this.checkedAt,
       problems: this.problems,
     };
+  }
+
+  /** Every node with its health and load, plus how many live streams go out through it. */
+  nodeList(streamsByNode: Map<string, number>): NodesResponse {
+    const nodes = (this.nodes ?? []).map((n): NodeInfo => {
+      const sys = n.resources?.system;
+      return {
+        id: n.id,
+        name: n.name ?? `Node ${n.id}`,
+        type: n.type ?? null,
+        group: n.group ?? null,
+        enabled: n.enabled !== false,
+        healthy: Boolean(n.healthy),
+        draining: Boolean(n.drain_state && n.drain_state !== 'none'),
+        activeJobs: n.active_jobs ?? 0,
+        egressMbps: Math.round((n.egress_kbps ?? 0) / 100) / 10,
+        cpuPercent: sys?.cpu_pct ?? null,
+        cores: sys?.cores ?? null,
+        load1: sys?.load1 ?? null,
+        memoryUsedGb: sys?.mem_used_mb != null ? Math.round(sys.mem_used_mb / 102.4) / 10 : null,
+        memoryTotalGb: sys?.mem_total_mb != null ? Math.round(sys.mem_total_mb / 102.4) / 10 : null,
+        streams: streamsByNode.get(n.name ?? '') ?? 0,
+        lastHealthCheck: n.last_health_check ?? null,
+      };
+    });
+    nodes.sort((a, b) => b.egressMbps - a.egressMbps || a.name.localeCompare(b.name, undefined, { numeric: true }));
+    return { nodes, checkedAt: this.nodesAt };
   }
 }

@@ -24,6 +24,8 @@ export interface ActivityStream {
     seasonNumber: number | null;
     episodeNumber: number | null;
     itemId: string | null;
+    /** The file being played (Silo's media_file_id). */
+    fileId: string | null;
     posterUrl: string | null;
     durationSeconds: number | null;
   };
@@ -82,6 +84,8 @@ export interface ActivityStream {
     sourceKbps: number | null;
   };
   node: string | null;
+  /** The Silo node the stream goes out through, e.g. "silo-sp11". */
+  egressNode: string | null;
 }
 
 export interface ActivitySummary {
