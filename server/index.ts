@@ -7,6 +7,7 @@ import { HistoryStore } from './history/store.js';
 import { HistorySync } from './history/sync.js';
 import { type HistorySource, type SessionSource, SiloClient } from './silo/client.js';
 import { MockHistorySource, MockSessionSource } from './silo/mock.js';
+import { StatsService } from './stats/stats.js';
 
 let config;
 try {
@@ -43,7 +44,8 @@ monitor.subscribe((snapshot) => {
 });
 monitor.start();
 
-const app = createApp(config, { monitor, history, historySync });
+const stats = new StatsService(db);
+const app = createApp(config, { monitor, history, historySync, stats });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

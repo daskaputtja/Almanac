@@ -5,11 +5,13 @@
 Almanac is a self-hosted companion dashboard for Silo. It shows who is watching what right now, keeps a permanent record of every play, and turns that history into stats and graphs.
 
 > [!WARNING]
-> Almanac is in early development. The live Activity and History pages work; everything else is still planned. Silo itself is pre-release, and its API may change before 1.0.
+> Almanac is in early development. The Activity, History and Statistics pages work; everything else is still planned. Silo itself is pre-release, and its API may change before 1.0.
 
 ![The Almanac Activity page, showing live streams with demo data](docs/activity.png)
 
 ![The Almanac History page, showing past plays with demo data](docs/history.png)
+
+![The Almanac Statistics page, showing charts and top lists with demo data](docs/statistics.png)
 
 ## Features
 
@@ -29,11 +31,15 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - Detail for each play: time actually watched, pauses, start and end position, player, IP address and why it ended
 - Hides plays under 30 seconds by default
 
-### Statistics and graphs (planned)
-- Most watched titles, most active users, popular platforms and devices
-- Plays by day, by hour and by day of the week
-- Direct play versus transcode trends over time
-- Per-user pages showing each person's watch time and habits
+### Statistics ✅
+- Totals for plays, watch time, active users, plays per day and the share of direct play
+- Plays per day (or per week for long periods), split by playback method, with a table view
+- A heatmap of when people press play, by day of the week and hour, in your time zone
+- Top shows, movies, users, platforms and players, ranked by plays or by watch time
+- For the last 7, 30 or 90 days, the last year or all time, for everyone or one user
+
+### Users (planned)
+- A page for each user showing their watch time, habits, devices and recent plays
 
 ### Library (planned)
 - Recently added media
@@ -133,6 +139,7 @@ server/            The Almanac server (Hono on Node.js)
   silo/            Talking to Silo: API client, response types, demo data
   activity/        Turning Silo sessions into Almanac's activity view
   history/         Storing play history and syncing it from Silo
+  stats/           Statistics calculated from the play history
   db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard
 web/               The dashboard (React, Vite, Tailwind)

@@ -1,18 +1,21 @@
 import { ActivityPage } from './pages/ActivityPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { StatsPage } from './pages/StatsPage';
 import { Link, useLocation } from './lib/router';
 
-const NAV = [
-  { label: 'Activity', path: '/' },
-  { label: 'History', path: '/history' },
-  { label: 'Statistics', soon: true },
-  { label: 'Users', soon: true },
-  { label: 'Libraries', soon: true },
+type Page = 'activity' | 'history' | 'stats';
+
+const NAV: { label: string; path?: string; page?: Page }[] = [
+  { label: 'Activity', path: '/', page: 'activity' },
+  { label: 'History', path: '/history', page: 'history' },
+  { label: 'Statistics', path: '/stats', page: 'stats' },
+  { label: 'Users' },
+  { label: 'Libraries' },
 ];
 
 export function App() {
   const { pathname } = useLocation();
-  const page = pathname.startsWith('/history') ? 'history' : 'activity';
+  const page: Page = pathname.startsWith('/history') ? 'history' : pathname.startsWith('/stats') ? 'stats' : 'activity';
 
   return (
     <div className="min-h-screen">
@@ -35,7 +38,7 @@ export function App() {
                   </span>
                 );
               }
-              const active = (item.path === '/' ? 'activity' : 'history') === page;
+              const active = item.page === page;
               return (
                 <Link
                   key={item.label}
@@ -54,7 +57,7 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
-        {page === 'history' ? <HistoryPage /> : <ActivityPage />}
+        {page === 'history' ? <HistoryPage /> : page === 'stats' ? <StatsPage /> : <ActivityPage />}
       </main>
     </div>
   );

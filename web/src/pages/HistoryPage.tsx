@@ -376,7 +376,7 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
         ) : (
           <div className="flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-raised">
-              <div className={`h-full ${entry.completed ? 'bg-direct' : 'bg-harvest'}`} style={{ width: `${percent}%` }} />
+              <div className={`h-full ${entry.completed ? 'bg-ink-muted' : 'bg-harvest'}`} style={{ width: `${percent}%` }} />
             </div>
             <span className="w-10 text-right text-xs tabular-nums text-ink-muted">
               {entry.completed ? 'Done' : `${Math.round(percent)}%`}

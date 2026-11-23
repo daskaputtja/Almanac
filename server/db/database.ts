@@ -58,6 +58,10 @@ const MIGRATIONS: string[] = [
     CREATE INDEX plays_sort_title ON plays (COALESCE(NULLIF(series_title, ''), title) COLLATE NOCASE, ended_at DESC);
     CREATE INDEX plays_sort_watched ON plays (COALESCE(watched_seconds, 0), ended_at DESC);
   `,
+  /* 3: the Statistics page filters and groups by when plays started */ `
+    CREATE INDEX plays_started_at ON plays (started_at);
+    CREATE INDEX plays_user_started_at ON plays (user_id, started_at);
+  `,
 ];
 
 export type Database = DatabaseSync;

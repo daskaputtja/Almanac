@@ -13,10 +13,12 @@
   --color-harvest: #f5b041;
   --color-harvest-dim: #8a6424;
 
-  --color-direct: #4ade80;
-  --color-stream: #38bdf8;
-  --color-remux: #a78bfa;
-  --color-transcode: #fb923c;
+  /* Playback methods, in this order. Checked with a colour-blindness
+     validator on the panel colour; keep the order if you change them. */
+  --color-direct: #3987e5;
+  --color-stream: #199e70;
+  --color-remux: #9085e9;
+  --color-transcode: #d95926;
 }
 
 html,

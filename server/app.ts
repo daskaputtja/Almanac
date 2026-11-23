@@ -6,13 +6,16 @@ import type { HistoryQuery, HistorySort } from '../shared/history.js';
 import type { PlayMethod } from '../shared/activity.js';
 import type { ActivityMonitor } from './activity/monitor.js';
 import type { Config } from './config.js';
+import type { StatsQuery } from '../shared/stats.js';
 import type { HistoryStore } from './history/store.js';
 import type { HistorySync } from './history/sync.js';
+import type { StatsService } from './stats/stats.js';
 
 export interface AppServices {
   monitor: ActivityMonitor;
   history: HistoryStore;
   historySync: HistorySync;
+  stats: StatsService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -50,7 +53,21 @@ export function parseHistoryQuery(params: Record<string, string | undefined>): H
   };
 }
 
-export function createApp(config: Pick<Config, 'auth' | 'webRoot'>, { monitor, history, historySync }: AppServices) {
+/** Turn `/api/stats?…` query parameters into a validated StatsQuery. */
+export function parseStatsQuery(params: Record<string, string | undefined>): StatsQuery {
+  const history = parseHistoryQuery(params);
+  const limit = Number(params.limit);
+  return {
+    from: history.from,
+    to: history.to,
+    userId: history.userId,
+    minWatchedSeconds: history.minWatchedSeconds,
+    rankBy: params.rankBy === 'watched' ? 'watched' : 'plays',
+    limit: Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : undefined,
+  };
+}
+
+export function createApp(config: Pick<Config, 'auth' | 'webRoot'>, { monitor, history, historySync, stats }: AppServices) {
   const app = new Hono();
 
   // Health checks stay open so Docker can probe the container.
@@ -86,6 +103,7 @@ export function createApp(config: Pick<Config, 'auth' | 'webRoot'>, { monitor, h
   app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()))));
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
   app.get('/api/history/status', (c) => c.json(historySync.status()));
+  app.get('/api/stats', (c) => c.json(stats.get(parseStatsQuery(c.req.query()))));
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

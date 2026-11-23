@@ -89,7 +89,7 @@ export function StreamCard({ stream, position }: Props) {
               {[client.name, platformLabel(client.platform)].filter(Boolean).join(' · ') || 'Unknown'}
             </Row>
             <Row label="Location">
-              <span className={client.location === 'local' ? 'text-direct' : 'text-ink'}>
+              <span className="text-ink">
                 {client.location === 'local' ? 'Local' : 'Remote'}
               </span>
               {client.ip && <span className="text-ink-muted"> · {client.ip}</span>}
