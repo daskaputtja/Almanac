@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { type FlagGroup, type FlagsResponse, GROUP_LABELS } from '../../../shared/moderation';
 import { FlagCard } from '../components/FlagCard';
+import { ThresholdSummary } from '../components/ThresholdsSection';
 import { api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 import { useModeration } from '../lib/moderation';
@@ -96,6 +97,8 @@ export function ModerationPage() {
           </button>
         )}
       </div>
+
+      <ThresholdSummary />
 
       {error && <p className="text-sm text-red-300">{error}</p>}
       {data && flags.length === 0 && (

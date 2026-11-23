@@ -7,6 +7,7 @@ import type { PlayMethod } from '../shared/activity.js';
 import type { ActivityMonitor } from './activity/monitor.js';
 import type { ActivitySnapshot } from '../shared/activity.js';
 import { can } from '../shared/permissions.js';
+import { validateThresholds } from '../shared/moderation.js';
 import type { UserDetail } from '../shared/users.js';
 import { type AuthEnv, createAuth, requirePermission } from './auth/routes.js';
 import type { AuthService } from './auth/service.js';
@@ -235,6 +236,19 @@ export function createApp(
   app.post('/api/moderation/notes/:id/delete', (c) => {
     moderation.deleteNote(Number(c.req.param('id')), actor(c));
     return c.json({ ok: true });
+  });
+
+  app.get('/api/moderation/thresholds', (c) => c.json(moderation.thresholdsResponse()));
+  app.post('/api/moderation/thresholds/preview', requirePermission('configureFlags'), async (c) => {
+    const thresholds = validateThresholds((await jsonBody(c)).thresholds);
+    if (typeof thresholds === 'string') return c.json({ error: thresholds }, 400);
+    return c.json(moderation.preview(thresholds));
+  });
+  app.post('/api/moderation/thresholds', requirePermission('configureFlags'), async (c) => {
+    const thresholds = validateThresholds((await jsonBody(c)).thresholds);
+    if (typeof thresholds === 'string') return c.json({ error: thresholds }, 400);
+    moderation.setThresholds(thresholds, c.get('session').user.username);
+    return c.json(moderation.thresholdsResponse());
   });
 
   app.get('/api/moderation/tags', (c) => c.json(moderation.tags()));

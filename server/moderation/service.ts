@@ -1,6 +1,12 @@
 import {
   FLAG_GROUP,
   type FlagKind,
+  type FlagPreview,
+  type FlagThresholds,
+  type PreviewCounts,
+  type ThresholdsResponse,
+  DEFAULT_THRESHOLDS,
+  withDefaults,
   type FlagsResponse,
   type ModerationFlag,
   type Severity,
@@ -8,6 +14,7 @@ import {
   type UserNote,
 } from '../../shared/moderation.js';
 import { type Database, transaction } from '../db/database.js';
+import { SettingsStore } from '../db/settings.js';
 import { type DetectedFlag, type LiveStreamForDetection, type PlayForDetection, detectFlags } from './detect.js';
 
 export const WINDOW_DAYS = 7;
@@ -52,16 +59,70 @@ export interface Actor {
   manageAllNotes: boolean;
 }
 
+const THRESHOLDS_KEY = 'flagThresholds';
+
 export class ModerationService {
   private checkedAt: string | null = null;
+  /** What was playing at the last check, reused for previews and re-checks after a settings change. */
+  private lastLive = new Map<string, LiveStreamForDetection[]>();
+  private readonly settings: SettingsStore;
 
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database) {
+    this.settings = new SettingsStore(db);
+  }
+
+  // ----- Thresholds -----
+
+  thresholds(): FlagThresholds {
+    return withDefaults(this.settings.get<FlagThresholds>(THRESHOLDS_KEY)?.value);
+  }
+
+  thresholdsResponse(): ThresholdsResponse {
+    const stored = this.settings.get<FlagThresholds>(THRESHOLDS_KEY);
+    return {
+      thresholds: withDefaults(stored?.value),
+      defaults: DEFAULT_THRESHOLDS,
+      updatedBy: stored?.updatedBy ?? null,
+      updatedAt: stored?.updatedAt ?? null,
+    };
+  }
+
+  /** Save new thresholds (already validated) and re-check every account with them. */
+  setThresholds(thresholds: FlagThresholds, by: string): void {
+    this.settings.set(THRESHOLDS_KEY, thresholds, by);
+    this.refresh(this.lastLive);
+  }
+
+  /** How many accounts the current and the proposed thresholds flag, without saving anything. */
+  preview(proposed: FlagThresholds, now = Date.now()): FlagPreview {
+    const count = (thresholds: FlagThresholds): PreviewCounts => {
+      const detected = this.detectAll(this.lastLive, now, thresholds);
+      const empty = () => ({ low: 0, medium: 0, high: 0 });
+      const byKind: PreviewCounts['byKind'] = {
+        concurrent_networks: empty(),
+        many_networks: empty(),
+        many_devices: empty(),
+        nonstop: empty(),
+        heavy_daily: empty(),
+        back_to_back: empty(),
+      };
+      for (const flags of detected.values()) for (const f of flags) byKind[f.kind][f.severity]++;
+      return { accounts: detected.size, byKind };
+    };
+    return { current: count(this.thresholds()), proposed: count(proposed) };
+  }
 
   /**
    * Run every check over the last week of plays (and what's playing now),
    * then update the stored flags. Takes well under a second on a busy server.
    */
   refresh(liveByUser: Map<string, LiveStreamForDetection[]> = new Map(), now = Date.now()): void {
+    this.lastLive = liveByUser;
+    const detected = this.detectAll(liveByUser, now, this.thresholds());
+    this.store(detected, now);
+  }
+
+  private detectAll(liveByUser: Map<string, LiveStreamForDetection[]>, now: number, thresholds: FlagThresholds): Map<string, DetectedFlag[]> {
     const since = new Date(now - WINDOW_DAYS * 86_400_000).toISOString();
     const rows = this.db
       .prepare(
@@ -107,10 +168,13 @@ export class ModerationService {
 
     const detected = new Map<string, DetectedFlag[]>();
     for (const userId of new Set([...byUser.keys(), ...liveByUser.keys()])) {
-      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? []);
+      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds);
       if (flags.length) detected.set(userId, flags);
     }
+    return detected;
+  }
 
+  private store(detected: Map<string, DetectedFlag[]>, now: number): void {
     const nowIso = new Date(now).toISOString();
     transaction(this.db, () => {
       const existing = new Map(

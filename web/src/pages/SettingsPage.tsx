@@ -3,6 +3,7 @@ import { useAuth } from '../auth/AuthGate';
 import { RecoveryCodes } from '../auth/AuthScreens';
 import { ROLE_LABELS } from '../../../shared/permissions';
 import { AccountsSection } from '../components/AccountsSection';
+import { ThresholdsSection } from '../components/ThresholdsSection';
 import { ApiError, api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 
@@ -27,6 +28,7 @@ export function SettingsPage() {
         </p>
       </div>
       {can('manageAccounts') && <AccountsSection onSelfChanged={refresh} />}
+      {can('configureFlags') && <ThresholdsSection />}
       <Sessions />
       <RecoverySection left={state.recoveryCodesLeft ?? 0} onChange={refresh} />
       <PasswordSection />

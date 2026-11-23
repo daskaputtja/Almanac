@@ -364,7 +364,7 @@ describe('roles', () => {
     const { c } = await setUp();
     const state = (await c.get('/api/auth/state')).json!;
     expect(state.role).toBe('admin');
-    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes']);
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags']);
   });
 
   it('tells a mod what they can do', async () => {
@@ -430,6 +430,20 @@ describe('roles', () => {
     const notes = (await admin.get('/api/moderation/users/100/notes')).json!.notes as { id: number; canEdit: boolean }[];
     expect(notes[0]!.canEdit).toBe(true); // admins can edit anyone's notes
     expect((await mod.post('/api/moderation/notes/999/delete')).status).toBe(404);
+  });
+
+  it('lets mods read the flag thresholds but only admins change them', async () => {
+    const { admin, mod } = await withMod();
+    expect((await mod.get('/api/moderation/thresholds')).status).toBe(200);
+    const body = { thresholds: { concurrentNetworks: { enabled: true, medium: 4, high: 5 } } };
+    expect((await mod.post('/api/moderation/thresholds', body)).status).toBe(403);
+    expect((await mod.post('/api/moderation/thresholds/preview', body)).status).toBe(403);
+    expect((await admin.post('/api/moderation/thresholds/preview', body)).status).toBe(200);
+    expect((await admin.post('/api/moderation/thresholds', { thresholds: { concurrentNetworks: { enabled: true, medium: 5, high: 4 } } })).status).toBe(400);
+    const saved = await admin.post('/api/moderation/thresholds', body);
+    expect(saved.status).toBe(200);
+    expect((saved.json!.thresholds as Record<string, unknown>).concurrentNetworks).toEqual({ enabled: true, medium: 4, high: 5 });
+    expect(saved.json!.updatedBy).toBe('alex');
   });
 
   it('keeps account management for admins', async () => {

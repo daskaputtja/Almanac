@@ -1,28 +1,11 @@
-import type { FlagKind, Severity } from '../../shared/moderation.js';
+import { DEFAULT_THRESHOLDS, type FlagKind, type FlagThresholds, type Severity, type ThresholdLevels } from '../../shared/moderation.js';
 
 /**
- * Spotting unusual account behaviour from play history.
- *
- * Thresholds were chosen from a real server's history (about 450 active
- * users): each flags roughly the top 1% of accounts or fewer, and normal
- * heavy viewers (families, bingers, phones changing IP) stay under them.
+ * Spotting unusual account behaviour from play history. The levels each
+ * check flags at are adjustable in Settings; see DEFAULT_THRESHOLDS for the
+ * defaults and why they were chosen.
  */
-export const THRESHOLDS = {
-  /** Different networks playing at the same moment. */
-  concurrentNetworks: { medium: 3, high: 4 },
-  /** Different networks in the window. */
-  networksInWindow: { low: 10, medium: 14 },
-  /** Different devices in the window. */
-  devicesInWindow: { low: 7, medium: 10 },
-  /** Longest stretch of playback with no gap over 10 minutes, in hours. */
-  nonstopHours: { medium: 24, high: 48 },
-  /** Average hours of playback per day across the window. */
-  dailyHours: { medium: 12, high: 18 },
-  /** Titles played start to finish back to back with no real pauses. */
-  backToBack: { medium: 20, high: 40 },
-  /** The same, counting only movies. */
-  backToBackMovies: { medium: 5, high: 8 },
-} as const;
+export const THRESHOLDS = DEFAULT_THRESHOLDS;
 
 /** Plays this close together count as one continuous stretch. */
 const CONTINUOUS_GAP_MS = 10 * 60_000;
@@ -88,7 +71,8 @@ export function networkOf(ip: string | null | undefined): string | null {
  */
 const when = (ms: number) => `{{time:${new Date(ms).toISOString()}}}`;
 
-function severityFor(value: number, levels: { low?: number; medium?: number; high?: number }): Severity | null {
+function severityFor(value: number, levels: ThresholdLevels): Severity | null {
+  if (!levels.enabled) return null;
   if (levels.high !== undefined && value >= levels.high) return 'high';
   if (levels.medium !== undefined && value >= levels.medium) return 'medium';
   if (levels.low !== undefined && value >= levels.low) return 'low';
@@ -98,7 +82,18 @@ function severityFor(value: number, levels: { low?: number; medium?: number; hig
 const plural = (n: number, word: string) => `${n.toLocaleString('en')} ${word}${n === 1 ? '' : 's'}`;
 
 /** Check one user's plays from the window (and any live streams) for unusual behaviour. */
-export function detectFlags(plays: PlayForDetection[], windowDays: number, live: LiveStreamForDetection[] = []): DetectedFlag[] {
+/** The lowest level a check flags at. */
+function lowest(levels: ThresholdLevels): number {
+  return Math.min(...[levels.low, levels.medium, levels.high].filter((v): v is number => typeof v === 'number'));
+}
+
+export function detectFlags(
+  plays: PlayForDetection[],
+  windowDays: number,
+  live: LiveStreamForDetection[] = [],
+  thresholds: FlagThresholds = DEFAULT_THRESHOLDS,
+): DetectedFlag[] {
+  const T = thresholds;
   const flags: DetectedFlag[] = [];
   const sorted = [...plays].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const spans = sorted.map((p) => ({ play: p, start: Date.parse(p.startedAt), end: Date.parse(p.endedAt), network: networkOf(p.ip) }));
@@ -110,7 +105,7 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
   for (const s of spans) {
     const active = spans.filter((o) => o.start <= s.start && o.end > s.start);
     const networks = new Set(active.map((o) => o.network).filter((n): n is string => Boolean(n)));
-    if (networks.size >= THRESHOLDS.concurrentNetworks.medium) {
+    if (networks.size >= lowest(T.concurrentNetworks)) {
       // Count separate incidents at least an hour apart.
       if (!incidents.length || s.start - incidents[incidents.length - 1]! > 3_600_000) incidents.push(s.start);
     }
@@ -124,13 +119,13 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
     }
   }
   const liveNetworks = new Set(live.map((l) => networkOf(l.ip)).filter((n): n is string => Boolean(n)));
-  const liveNow = liveNetworks.size >= THRESHOLDS.concurrentNetworks.medium;
+  const liveNow = liveNetworks.size >= lowest(T.concurrentNetworks);
   const concurrent = Math.max(worst.count, liveNetworks.size);
-  const concurrentSeverity = severityFor(concurrent, THRESHOLDS.concurrentNetworks);
+  const concurrentSeverity = severityFor(concurrent, T.concurrentNetworks);
   if (concurrentSeverity) {
     const details: string[] = [];
     if (liveNow) details.push(`Happening right now: ${plural(liveNetworks.size, 'network')} at once.`);
-    if (worst.count >= THRESHOLDS.concurrentNetworks.medium) {
+    if (worst.count >= lowest(T.concurrentNetworks)) {
       details.push(`Most recent peak: ${when(worst.at)}${worst.players.length ? ` on ${worst.players.join(', ')}` : ''}.`);
     }
     if (incidents.length > 1) details.push(`Seen ${plural(incidents.length, 'separate time')} in the last ${windowDays} days.`);
@@ -146,7 +141,7 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
 
   // --- Many networks / devices in the window ---------------------------------
   const allNetworks = [...new Set(spans.map((s) => s.network).filter((n): n is string => Boolean(n)))];
-  const networkSeverity = severityFor(allNetworks.length, THRESHOLDS.networksInWindow);
+  const networkSeverity = severityFor(allNetworks.length, T.networksInWindow);
   if (networkSeverity) {
     flags.push({
       kind: 'many_networks',
@@ -159,7 +154,7 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
   }
 
   const devices = new Set(sorted.map((p) => p.deviceId).filter(Boolean));
-  const deviceSeverity = severityFor(devices.size, THRESHOLDS.devicesInWindow);
+  const deviceSeverity = severityFor(devices.size, T.devicesInWindow);
   if (deviceSeverity) {
     const players = [...new Set(sorted.map((p) => p.player).filter(Boolean))];
     flags.push({
@@ -192,7 +187,7 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
   }
   closeRun();
   const longestHours = longest.ms / 3_600_000;
-  const nonstopSeverity = severityFor(longestHours, THRESHOLDS.nonstopHours);
+  const nonstopSeverity = severityFor(longestHours, T.nonstopHours);
   if (nonstopSeverity) {
     flags.push({
       kind: 'nonstop',
@@ -205,7 +200,7 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
   }
 
   const dailyHours = busyMs / 3_600_000 / windowDays;
-  const dailySeverity = severityFor(dailyHours, THRESHOLDS.dailyHours);
+  const dailySeverity = severityFor(dailyHours, T.dailyHours);
   if (dailySeverity) {
     flags.push({
       kind: 'heavy_daily',
@@ -250,8 +245,8 @@ export function detectFlags(plays: PlayForDetection[], windowDays: number, live:
     if (chain.movies > bestMovies.count) bestMovies = { count: chain.movies, start: movieRunStart, end: s.end, media: movieMedia };
     prevEnd = s.end;
   }
-  const chainSeverity = severityFor(best.count, THRESHOLDS.backToBack);
-  const movieSeverity = severityFor(bestMovies.count, THRESHOLDS.backToBackMovies);
+  const chainSeverity = severityFor(best.count, T.backToBack);
+  const movieSeverity = severityFor(bestMovies.count, T.backToBackMovies);
   if (chainSeverity || movieSeverity) {
     const useMovies = Boolean(movieSeverity && (!chainSeverity || (movieSeverity === 'high' && chainSeverity !== 'high')));
     const pick = useMovies ? bestMovies : best;

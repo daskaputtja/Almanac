@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_THRESHOLDS, validateThresholds, withDefaults } from '../shared/moderation.js';
 import { openDatabase } from '../server/db/database.js';
 import { HistoryStore } from '../server/history/store.js';
 import { type PlayForDetection, THRESHOLDS, detectFlags, networkOf } from '../server/moderation/detect.js';
@@ -239,5 +240,50 @@ describe('ModerationService', () => {
     service.setTags('42', mod, ['Warned']);
     expect(service.tags().byUser['42']).toEqual(['Warned']);
     expect(() => service.setTags('42', mod, ['x'.repeat(40)])).toThrow(/32 characters/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Adjustable thresholds
+
+
+describe('thresholds', () => {
+  it('validates levels', () => {
+    expect(validateThresholds({})).toEqual(DEFAULT_THRESHOLDS);
+    expect(validateThresholds({ concurrentNetworks: { enabled: true, medium: 4, high: 3 } })).toMatch(/higher than the one before/);
+    expect(validateThresholds({ concurrentNetworks: { enabled: true, medium: 1, high: 3 } })).toMatch(/between 2 and 20/);
+    expect(validateThresholds({ dailyHours: { enabled: true, medium: 'lots' } })).toMatch(/enter a number/);
+    const ok = validateThresholds({ nonstopHours: { enabled: false, medium: 30, high: 60 } });
+    expect(ok).toMatchObject({ nonstopHours: { enabled: false, medium: 30, high: 60 } });
+    expect(withDefaults(null)).toEqual(DEFAULT_THRESHOLDS);
+    expect(withDefaults({ nonsense: true })).toEqual(DEFAULT_THRESHOLDS);
+  });
+
+  it('uses the levels it is given, and skips checks that are off', () => {
+    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4' }), play(10.6, 1, { ip: '192.0.2.8' })];
+    const stricter = { ...DEFAULT_THRESHOLDS, concurrentNetworks: { enabled: true, medium: 2, high: 3 } };
+    expect(detectFlags(three, 7, [], stricter)[0]!.severity).toBe('high');
+    const off = { ...DEFAULT_THRESHOLDS, concurrentNetworks: { enabled: false, medium: 3, high: 4 } };
+    expect(detectFlags(three, 7, [], off)).toEqual([]);
+    const two = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4' })];
+    expect(kinds(detectFlags(two, 7, [], stricter))).toEqual(['concurrent_networks']);
+  });
+
+  it('previews, saves and re-checks every account', () => {
+    const { history, service, now, sharing } = setup();
+    history.upsert(sharing(3));
+    service.refresh(new Map(), now);
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(1);
+
+    const looser = { ...DEFAULT_THRESHOLDS, concurrentNetworks: { enabled: true, medium: 5, high: 6 } };
+    const preview = service.preview(looser, now);
+    expect(preview.current.accounts).toBe(1);
+    expect(preview.current.byKind.concurrent_networks.medium).toBe(1);
+    expect(preview.proposed.accounts).toBe(0);
+    // Previewing doesn't change anything.
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(1);
+
+    service.setThresholds(looser, 'alex');
+    expect(service.thresholdsResponse()).toMatchObject({ thresholds: looser, updatedBy: 'alex' });
   });
 });

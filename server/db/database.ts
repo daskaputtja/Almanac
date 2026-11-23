@@ -192,6 +192,14 @@ const MIGRATIONS: string[] = [
       PRIMARY KEY (user_id, tag)
     );
   `,
+  /* 9: settings changed from the dashboard, stored as JSON */ `
+    CREATE TABLE app_settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;

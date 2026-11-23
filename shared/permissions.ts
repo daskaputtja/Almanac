@@ -27,7 +27,9 @@ export type Permission =
   /** See account flags, review them, and read and write notes and tags on users. */
   | 'moderate'
   /** Edit or delete anyone's notes, not just your own. */
-  | 'manageAllNotes';
+  | 'manageAllNotes'
+  /** Change the thresholds the account checks use. */
+  | 'configureFlags';
 
 const GRANTS: Record<Permission, Role[]> = {
   viewIpAddresses: ['admin'],
@@ -35,6 +37,7 @@ const GRANTS: Record<Permission, Role[]> = {
   manageNotifications: ['admin'],
   moderate: ['admin', 'mod'],
   manageAllNotes: ['admin'],
+  configureFlags: ['admin'],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {
