@@ -1,4 +1,4 @@
-import type { SiloCollection, SiloProblem, SiloSession } from './types.js';
+import type { HistoryPageQuery, SiloCollection, SiloHistoryEntry, SiloProblem, SiloSession } from './types.js';
 
 export class SiloError extends Error {
   constructor(
@@ -15,10 +15,15 @@ export interface SessionSource {
   listSessions(): Promise<SiloSession[]>;
 }
 
+/** Where Almanac gets finished plays from. Pages are newest first. */
+export interface HistorySource {
+  listHistoryPage(query: HistoryPageQuery): Promise<SiloCollection<SiloHistoryEntry>>;
+}
+
 const PAGE_SIZE = 200; // Silo's maximum
 const MAX_PAGES = 50; // stop runaway paging if a cursor never ends
 
-export class SiloClient implements SessionSource {
+export class SiloClient implements SessionSource, HistorySource {
   private readonly baseUrl: string;
 
   constructor(
@@ -80,5 +85,17 @@ export class SiloClient implements SessionSource {
     }
 
     return sessions;
+  }
+
+  /**
+   * One page of finished plays, newest first. Silo binds each cursor to its
+   * query, so the same `endedAfter` must be sent with every page of a walk.
+   */
+  listHistoryPage(query: HistoryPageQuery): Promise<SiloCollection<SiloHistoryEntry>> {
+    return this.get<SiloCollection<SiloHistoryEntry>>('/api/v2/admin/playback-history', {
+      limit: query.limit ?? PAGE_SIZE,
+      cursor: query.cursor,
+      ended_after: query.endedAfter,
+    });
   }
 }

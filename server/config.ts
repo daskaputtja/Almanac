@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 export interface Config {
   port: number;
   host: string;
@@ -5,6 +7,8 @@ export interface Config {
   siloApiKey: string;
   mock: boolean;
   pollIntervalMs: number;
+  historySyncIntervalMs: number;
+  databasePath: string;
   auth: { username: string; password: string } | null;
   webRoot: string;
 }
@@ -32,6 +36,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const pollSeconds = Number(env.POLL_INTERVAL_SECONDS ?? 5);
   if (!Number.isFinite(pollSeconds) || pollSeconds < 1) problems.push('POLL_INTERVAL_SECONDS must be at least 1.');
 
+  const historySeconds = Number(env.HISTORY_SYNC_SECONDS ?? 60);
+  if (!Number.isFinite(historySeconds) || historySeconds < 10) problems.push('HISTORY_SYNC_SECONDS must be at least 10.');
+
   const username = env.ALMANAC_USERNAME ?? '';
   const password = env.ALMANAC_PASSWORD ?? '';
   if (Boolean(username) !== Boolean(password)) {
@@ -49,6 +56,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     siloApiKey,
     mock,
     pollIntervalMs: pollSeconds * 1000,
+    historySyncIntervalMs: historySeconds * 1000,
+    // Demo data gets its own database so it never mixes with real history.
+    databasePath: join(env.DATA_DIR ?? 'data', mock ? 'almanac-demo.db' : 'almanac.db'),
     auth: username ? { username, password } : null,
     webRoot: env.ALMANAC_WEB_ROOT ?? 'dist/web',
   };

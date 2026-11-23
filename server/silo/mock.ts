@@ -1,5 +1,5 @@
-import type { SessionSource } from './client.js';
-import type { SiloSession } from './types.js';
+import type { HistorySource, SessionSource } from './client.js';
+import type { HistoryPageQuery, SiloCollection, SiloHistoryEntry, SiloSession } from './types.js';
 
 /**
  * A fake Silo server for development and screenshots, enabled with
@@ -108,5 +108,85 @@ export class MockSessionSource implements SessionSource {
           : null,
       };
     });
+  }
+}
+
+/** A small seeded random number generator, so demo history is the same every run. */
+function seededRandom(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state * 1664525 + 1013904223) % 4294967296;
+    return state / 4294967296;
+  };
+}
+
+/** Thirty days of made-up finished plays, built from the same demo titles and users. */
+export class MockHistorySource implements HistorySource {
+  private readonly entries: SiloHistoryEntry[];
+
+  constructor(now = Date.now(), count = 600) {
+    const random = seededRandom(42);
+    const pick = <T>(items: T[]): T => items[Math.floor(random() * items.length)]!;
+    const users = [...new Set(TEMPLATES.map((t) => t.user))];
+    const endReasons = ['stopped', 'stopped', 'stopped', 'stopped', 'expired', 'aborted', 'terminated'];
+
+    this.entries = Array.from({ length: count }, (_, i): SiloHistoryEntry => {
+      const t = pick(TEMPLATES);
+      const user = pick(users);
+      const endedAt = now - random() * 30 * 86_400_000;
+      const startPosition = random() < 0.7 ? 0 : Math.floor(random() * t.duration * 0.6);
+      const watched = Math.max(5, Math.floor(random() * (t.duration - startPosition)));
+      const completed = random() < 0.55;
+      const played = completed ? t.duration - startPosition : watched;
+      const paused = Math.floor(random() * 300);
+      const startedAt = endedAt - (played + paused) * 1000;
+      const location = random() < 0.4 ? 'local' : 'remote';
+
+      return {
+        session_id: `mock-play-${i + 1}`,
+        user_id: String(100 + users.indexOf(user)),
+        username: user,
+        profile_id: `mock-profile-${user}`,
+        profile_name: 'Main',
+        media_item_id: `mock-item-${TEMPLATES.indexOf(t) + 1}`,
+        media_file_id: String(5000 + TEMPLATES.indexOf(t)),
+        media_title: t.title,
+        media_type: t.type,
+        play_method: t.method,
+        started_at: new Date(startedAt).toISOString(),
+        ended_at: new Date(endedAt).toISOString(),
+        end_position_seconds: startPosition + played,
+        duration_seconds: t.duration,
+        completed,
+        played_seconds: played,
+        series_title: t.series ?? '',
+        season_number: t.season ?? null,
+        episode_number: t.episode ?? null,
+        measured: true,
+        start_position_seconds: startPosition,
+        paused_seconds: paused,
+        client_ip: fakeIp(i % 20, location),
+        device_id: `mock-device-${user}`,
+        device_platform: t.platform,
+        client_name: t.client,
+        client_version: '1.0.0',
+        video_decision: t.method === 'transcode' ? 'transcode' : t.method === 'remux' ? 'remux' : 'direct',
+        audio_decision: t.method === 'direct' ? 'direct' : 'transcode',
+        end_reason: completed ? 'stopped' : pick(endReasons),
+        subtitle: null,
+        lifecycle_seq: i + 1,
+      };
+    }).sort((a, b) => b.ended_at.localeCompare(a.ended_at) || b.session_id.localeCompare(a.session_id));
+  }
+
+  async listHistoryPage(query: HistoryPageQuery): Promise<SiloCollection<SiloHistoryEntry>> {
+    const limit = query.limit ?? 200;
+    const offset = query.cursor ? Number(query.cursor) : 0;
+    const matching = query.endedAfter
+      ? this.entries.filter((e) => e.ended_at >= query.endedAfter!)
+      : this.entries;
+    const items = matching.slice(offset, offset + limit);
+    const hasMore = offset + limit < matching.length;
+    return { items, page: { has_more: hasMore, next_cursor: hasMore ? String(offset + limit) : undefined } };
   }
 }

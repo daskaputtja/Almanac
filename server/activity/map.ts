@@ -16,9 +16,31 @@ function num(value: number | undefined | null): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Some clients (notably Jellyfin apps) report URL-encoded names such as
+ * `Jellyfin+for+Android+TV`; turn those into normal text.
+ */
+export function cleanClientName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  let clean = name;
+  if (!clean.includes(' ') && clean.includes('+')) clean = clean.replace(/\+/g, ' ');
+  if (/%[0-9A-Fa-f]{2}/.test(clean)) {
+    try {
+      clean = decodeURIComponent(clean);
+    } catch {
+      // Leave it as it was.
+    }
+  }
+  return clean.trim() || null;
+}
+
+/** Silo's play method as one of the four Almanac knows, defaulting to direct. */
+export function normalizePlayMethod(method: string | null | undefined): PlayMethod {
+  return method && (PLAY_METHODS as string[]).includes(method) ? (method as PlayMethod) : 'direct';
+}
+
 export function playMethodOf(session: SiloSession): PlayMethod {
-  const method = session.effective_play_method || session.play_method;
-  return (PLAY_METHODS as string[]).includes(method) ? (method as PlayMethod) : 'direct';
+  return normalizePlayMethod(session.effective_play_method || session.play_method);
 }
 
 export function toActivityStream(s: SiloSession): ActivityStream {
@@ -46,7 +68,7 @@ export function toActivityStream(s: SiloSession): ActivityStream {
       updatedAt: s.updated_at,
     },
     client: {
-      name: str(s.client_name),
+      name: cleanClientName(s.client_name),
       version: str(s.client_version),
       label: str(s.client_label),
       platform: str(s.device_platform),

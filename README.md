@@ -5,9 +5,11 @@
 Almanac is a self-hosted companion dashboard for Silo. It shows who is watching what right now, keeps a permanent record of every play, and turns that history into stats and graphs.
 
 > [!WARNING]
-> Almanac is in early development. The live Activity page works; everything else is still planned. Silo itself is pre-release, and its API may change before 1.0.
+> Almanac is in early development. The live Activity and History pages work; everything else is still planned. Silo itself is pre-release, and its API may change before 1.0.
 
 ![The Almanac Activity page, showing live streams with demo data](docs/activity.png)
+
+![The Almanac History page, showing past plays with demo data](docs/history.png)
 
 ## Features
 
@@ -19,10 +21,13 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - Source and target resolution, and whether the stream is local or remote
 - Updates every few seconds without reloading the page
 
-### History (planned)
-- A permanent, searchable log of every play
-- Filter by user, title, device, platform, IP address or date
-- Detail for each play: time actually watched, pauses, client, and playback method
+### History ✅
+- A permanent, searchable log of every play, kept in Almanac's own database
+- Imports all of Silo's existing history on first start, then keeps up as plays finish
+- Keeps usernames and titles even after Silo deletes the account or item
+- Filter by user, type, playback method, platform or period, and search by title, user, player or IP address
+- Detail for each play: time actually watched, pauses, start and end position, player, IP address and why it ended
+- Hides plays under 30 seconds by default
 
 ### Statistics and graphs (planned)
 - Most watched titles, most active users, popular platforms and devices
@@ -42,13 +47,17 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 
 ## How it works
 
-Almanac connects to Silo with an API key owned by a Silo administrator. Every few seconds it asks Silo for the current playback sessions, and it pushes changes to open dashboards straight away.
+Almanac connects to Silo with a read-only API key owned by a Silo administrator.
+
+- **Activity:** every few seconds Almanac asks Silo for the current playback sessions and pushes changes to open dashboards straight away.
+- **History:** Almanac copies Silo's play history into its own SQLite database. The first start imports everything Silo has, newest first. On a busy server this can take a while, and the History page shows progress as it goes. After that, Almanac fetches new plays every minute, and within seconds of a stream ending.
 
 ```
-Silo server  ──(REST API)──▶  Almanac server  ──(live updates)──▶  Your browser
+                        ┌──────────────────────┐
+Silo server ──REST API──▶ Almanac server       │──live updates──▶ Your browser
+                        │  └─ SQLite (/data)   │
+                        └──────────────────────┘
 ```
-
-Later versions will also listen to Silo's realtime events and keep their own database, so your history stays even after Silo prunes its records.
 
 ## Getting started
 
@@ -74,9 +83,13 @@ services:
       SILO_API_KEY: sa_your_key_here
       ALMANAC_USERNAME: admin
       ALMANAC_PASSWORD: change-me
+    volumes:
+      - ./almanac-data:/data
 ```
 
 Then open `http://your-server:8191`.
+
+The `/data` volume holds Almanac's database. Keep it, or Almanac will have to import your history again and will lose any plays Silo has since removed.
 
 ### Settings
 
@@ -88,6 +101,8 @@ Then open `http://your-server:8191`.
 | `ALMANAC_PASSWORD` | No | | Password for Almanac's login prompt |
 | `PORT` | No | `8191` | The port Almanac listens on |
 | `POLL_INTERVAL_SECONDS` | No | `5` | How often to ask Silo for activity |
+| `HISTORY_SYNC_SECONDS` | No | `60` | How often to fetch new plays from Silo |
+| `DATA_DIR` | No | `data` (`/data` in Docker) | Where Almanac keeps its database |
 | `SILO_MOCK` | No | `false` | Set to `true` to show made-up demo data instead of a real server |
 
 > [!IMPORTANT]
@@ -117,16 +132,21 @@ npm run dev             # opens the dashboard on http://localhost:5173
 server/            The Almanac server (Hono on Node.js)
   silo/            Talking to Silo: API client, response types, demo data
   activity/        Turning Silo sessions into Almanac's activity view
+  history/         Storing play history and syncing it from Silo
+  db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard
 web/               The dashboard (React, Vite, Tailwind)
 test/              Tests (Vitest)
 ```
 
-The dashboard never reads Silo's API responses directly. The server converts them into Almanac's own types in `server/activity/map.ts`, so when Silo's API changes, that is the only place that needs fixing.
+The dashboard never reads Silo's API responses directly. The server converts them into Almanac's own types (in `server/activity/map.ts` and `server/history/store.ts`), so when Silo's API changes, those are the only places that need fixing.
+
+Database changes go in `server/db/database.ts` as a new numbered migration. Never edit one that has already shipped.
 
 ## Tech stack
 
 - **Server:** TypeScript on Node.js with Hono
+- **Database:** SQLite, using Node's built-in `node:sqlite`
 - **Dashboard:** React, Vite and Tailwind CSS
 - **Tests:** Vitest
 - **Deployment:** a single Docker image, built automatically and published to GitHub Container Registry

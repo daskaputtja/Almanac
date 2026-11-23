@@ -10,3 +10,5 @@ services:
       SILO_API_KEY: sa_your_key_here
       ALMANAC_USERNAME: admin
       ALMANAC_PASSWORD: change-me
+    volumes:
+      - ./almanac-data:/data

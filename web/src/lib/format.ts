@@ -126,3 +126,48 @@ export function livePosition(
 function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/** 6070 → "1h 41m", 754 → "12m", 45 → "45s". */
+export function formatDuration(totalSeconds: number | null | undefined): string {
+  if (totalSeconds == null) return '—';
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 60) return `${s}s`;
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
+}
+
+/** "Today 14:32", "Yesterday 09:10", "Mon 17 Nov 14:32", or with the year if it isn't this year. */
+export function formatWhen(iso: string, now = new Date()): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (days === 0) return `Today ${time}`;
+  if (days === 1) return `Yesterday ${time}`;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const day = date.toLocaleDateString(undefined, {
+    weekday: days < 7 ? 'short' : undefined,
+    day: 'numeric',
+    month: 'short',
+    year: sameYear ? undefined : 'numeric',
+  });
+  return `${day} ${time}`;
+}
+
+export function formatFullDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium' });
+}
+
+const END_REASON_LABELS: Record<string, string> = {
+  stopped: 'Stopped by the viewer',
+  terminated: 'Stopped by an admin',
+  expired: 'Player stopped responding',
+  aborted: 'Failed to start',
+  replaced: 'Replaced by a new stream',
+};
+
+export function endReasonLabel(reason: string | null): string {
+  if (!reason) return 'Unknown';
+  return END_REASON_LABELS[reason] ?? sentenceCase(reason.replace(/_/g, ' '));
+}

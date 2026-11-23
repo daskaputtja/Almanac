@@ -10,12 +10,12 @@
   },
   "scripts": {
     "dev": "concurrently -k -n server,web -c blue,magenta \"npm:dev:server\" \"npm:dev:web\"",
-    "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
+    "dev:server": "tsx watch --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.ts",
     "dev:web": "vite",
     "build": "npm run build:web && npm run build:server",
     "build:web": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
-    "start": "node dist/server/server/index.js",
+    "start": "node --disable-warning=ExperimentalWarning dist/server/server/index.js",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run"
   },
