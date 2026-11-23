@@ -61,3 +61,15 @@ export interface Recap {
     newShows: number;
   } | null;
 }
+
+export interface RecapShare {
+  id: string;
+  /** The link's path, e.g. "/r/abc…"; the dashboard adds the site address. */
+  path: string;
+  year: number;
+  createdBy: string;
+  createdAt: string;
+  revoked: boolean;
+  views: number;
+  lastViewedAt: string | null;
+}

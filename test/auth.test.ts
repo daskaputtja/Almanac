@@ -16,6 +16,7 @@ import { RecapService } from '../server/recap/recap.js';
 import { LoadHistory } from '../server/load/load.js';
 import { TranscodeDoctor } from '../server/transcodes/doctor.js';
 import { TrendingService } from '../server/trending/trending.js';
+import { RecapShares } from '../server/recap/shares.js';
 import { MockServerSource } from '../server/silo/mock.js';
 import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
@@ -110,6 +111,7 @@ function makeApp() {
       load: new LoadHistory(db, new MockServerSource(), () => {}),
       transcodes: new TranscodeDoctor(db),
       trending: new TrendingService(db),
+      shares: new RecapShares(db, new RecapService(db)),
     },
   );
   return { app, auth, db, history, monitor };
@@ -372,13 +374,13 @@ describe('roles', () => {
     const { c } = await setUp();
     const state = (await c.get('/api/auth/state')).json!;
     expect(state.role).toBe('admin');
-    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags']);
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags', 'shareRecaps']);
   });
 
   it('tells a mod what they can do', async () => {
     const { mod } = await withMod();
     const state = (await mod.get('/api/auth/state')).json!;
-    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: ['moderate'] });
+    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: ['moderate', 'shareRecaps'] });
   });
 
   it('removes IP addresses from live activity for mods', async () => {
@@ -460,6 +462,34 @@ describe('roles', () => {
     expect((await mod.get('/api/recap?year=2026')).status).toBe(200);
     expect((await admin.get('/api/recap?year=2026&user=nobody')).status).toBe(404);
     expect((await admin.get('/api/recap?year=12')).status).toBe(400);
+  });
+
+  it('shares a recap through a private link, until it’s revoked', async () => {
+    const { app, mod, history } = await withMod();
+    const year = new Date().getFullYear();
+    const userId = (history.query({ pageSize: 1 }).items[0]!).user.id;
+    expect((await client(app).post('/api/recap/shares', { user: userId, year })).status).toBe(401);
+
+    const created = await mod.post('/api/recap/shares', { user: userId, year });
+    expect(created.status).toBe(201);
+    const path = created.json!.path as string;
+    expect(path).toMatch(/^\/r\/[A-Za-z0-9_-]{20,}$/);
+
+    // Anyone with the link, signed in or not, sees just that recap.
+    const visitor = client(app);
+    const opened = await visitor.get(`/api/public/recap/${path.slice(3)}`);
+    expect(opened.status).toBe(200);
+    expect(opened.json).toMatchObject({ scope: 'user', year, availableYears: [year], server: null });
+    expect((opened.json!.user as { id: string; name: string }).id).toBe('');
+    expect((await visitor.get('/api/activity')).status).toBe(401);
+    expect((await visitor.get(`/api/recap?year=${year}&user=${userId}`)).status).toBe(401);
+
+    const list = (await mod.get(`/api/recap/shares?user=${userId}`)).json!.shares as { id: string; views: number }[];
+    expect(list[0]!.views).toBe(1);
+
+    expect((await mod.post(`/api/recap/shares/${list[0]!.id}/revoke`)).status).toBe(200);
+    expect((await visitor.get(`/api/public/recap/${path.slice(3)}`)).status).toBe(404);
+    expect((await visitor.get('/api/public/recap/not-a-real-token-at-all')).status).toBe(404);
   });
 
   it('keeps account management for admins', async () => {

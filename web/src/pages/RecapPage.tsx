@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Recap, RecapTitle } from '../../../shared/recap';
 import { StackedBars } from '../components/charts/StackedBars';
 import { WeekHourHeatmap } from '../components/charts/WeekHourHeatmap';
+import { useAuth } from '../auth/AuthGate';
+import { SharePanel } from '../components/SharePanel';
 import { ApiError, api } from '../lib/api';
 import { platformLabel } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
@@ -15,6 +17,7 @@ export function RecapPage({ userId }: { userId?: string }) {
   const year = Number(new URLSearchParams(search).get('year')) || new Date().getFullYear();
   const [recap, setRecap] = useState<Recap | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { can } = useAuth();
 
   useEffect(() => {
     setRecap(null);
@@ -31,10 +34,6 @@ export function RecapPage({ userId }: { userId?: string }) {
 
   if (error) return <p className="py-20 text-center text-sm text-red-300">{error}</p>;
   if (!recap || !local) return <p className="py-20 text-center text-sm text-ink-muted">Gathering the year…</p>;
-
-  const who = recap.user ? `${recap.user.name}’s` : 'The server’s';
-  const hours = recap.totals.watchedSeconds / 3600;
-  const empty = recap.totals.plays === 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -65,6 +64,20 @@ export function RecapPage({ userId }: { userId?: string }) {
         )}
       </div>
 
+      {userId && can('shareRecaps') && <SharePanel userId={userId} year={year} name={recap.user?.name ?? ''} />}
+      <RecapBody recap={recap} local={local} />
+    </div>
+  );
+}
+
+/** The recap itself, shared by the dashboard and public share links. */
+export function RecapBody({ recap, local, isPublic = false }: { recap: Recap; local: LocalFacts; isPublic?: boolean }) {
+  const year = recap.year;
+  const who = recap.user ? `${recap.user.name}’s` : 'The server’s';
+  const hours = recap.totals.watchedSeconds / 3600;
+  const empty = recap.totals.plays === 0;
+  return (
+    <>
       {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border border-accent-dim/50 bg-gradient-to-br from-accent/20 via-panel to-panel p-6 sm:p-10">
         <p className="text-sm font-medium uppercase tracking-[0.2em] text-accent">{year} in review</p>
@@ -179,9 +192,13 @@ export function RecapPage({ userId }: { userId?: string }) {
                 {recap.server.topUsers.map((u, i) => (
                   <li key={u.id} className="flex items-baseline gap-3">
                     <span className="w-5 text-right text-sm tabular-nums text-ink-faint">{i + 1}</span>
-                    <Link to={`/users/${encodeURIComponent(u.id)}/recap?year=${year}`} className="font-medium text-accent hover:underline">
-                      {u.name}
-                    </Link>
+                    {isPublic ? (
+                      <span className="font-medium">{u.name}</span>
+                    ) : (
+                      <Link to={`/users/${encodeURIComponent(u.id)}/recap?year=${year}`} className="font-medium text-accent hover:underline">
+                        {u.name}
+                      </Link>
+                    )}
                     <span className="ml-auto tabular-nums">{Math.round(u.watchedSeconds / 3600).toLocaleString()} hours</span>
                     <span className="w-24 text-right text-sm tabular-nums text-ink-faint">{u.plays.toLocaleString()} plays</span>
                   </li>
@@ -191,7 +208,7 @@ export function RecapPage({ userId }: { userId?: string }) {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }
 
@@ -268,8 +285,10 @@ function hoursText(seconds: number): string {
   return h >= 10 ? `${Math.round(h).toLocaleString()} hours` : h >= 1 ? `${h.toFixed(1)} hours` : `${Math.round(seconds / 60)} minutes`;
 }
 
+export type LocalFacts = ReturnType<typeof localFacts>;
+
 /** Facts that depend on the viewer's time zone, worked out from UTC hours. */
-function localFacts(recap: Recap) {
+export function localFacts(recap: Recap) {
   const dayTotals = new Map<string, number>();
   const monthHours = Array<number>(12).fill(0);
   for (const [hour, , watched] of recap.hours) {

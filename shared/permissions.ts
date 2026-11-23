@@ -29,7 +29,9 @@ export type Permission =
   /** Edit or delete anyone's notes, not just your own. */
   | 'manageAllNotes'
   /** Change the thresholds the account checks use. */
-  | 'configureFlags';
+  | 'configureFlags'
+  /** Create and revoke links that show one user's recap without signing in. */
+  | 'shareRecaps';
 
 const GRANTS: Record<Permission, Role[]> = {
   viewIpAddresses: ['admin'],
@@ -38,6 +40,7 @@ const GRANTS: Record<Permission, Role[]> = {
   moderate: ['admin', 'mod'],
   manageAllNotes: ['admin'],
   configureFlags: ['admin'],
+  shareRecaps: ['admin', 'mod'],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

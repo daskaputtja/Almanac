@@ -239,6 +239,20 @@ const MIGRATIONS: string[] = [
     );
     CREATE INDEX stream_observations_seen ON stream_observations (last_seen);
   `,
+  /* 12: private links to one user's yearly recap */ `
+    CREATE TABLE recap_shares (
+      id             TEXT PRIMARY KEY,
+      token          TEXT NOT NULL UNIQUE,
+      user_id        TEXT NOT NULL,
+      year           INTEGER NOT NULL,
+      created_by     TEXT NOT NULL,
+      created_at     TEXT NOT NULL,
+      revoked_at     TEXT,
+      views          INTEGER NOT NULL DEFAULT 0,
+      last_viewed_at TEXT
+    );
+    CREATE INDEX recap_shares_user ON recap_shares (user_id, year);
+  `,
 ];
 
 export type Database = DatabaseSync;

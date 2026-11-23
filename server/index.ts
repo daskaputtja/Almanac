@@ -12,6 +12,7 @@ import { type CatalogSource, type HistorySource, type SessionSource, SiloClient 
 import { MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSource } from './silo/mock.js';
 import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
+import { RecapShares } from './recap/shares.js';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
 import { TrendingService } from './trending/trending.js';
@@ -109,7 +110,7 @@ monitor.subscribe((snapshot) => {
 
 const recap = new RecapService(db);
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db) });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap) });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

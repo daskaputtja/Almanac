@@ -23,6 +23,7 @@ import type { TranscodeDoctor } from './transcodes/doctor.js';
 import type { TrendingService } from './trending/trending.js';
 import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
+import { ShareError, type RecapShares } from './recap/shares.js';
 import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
@@ -40,6 +41,7 @@ export interface AppServices {
   load: LoadHistory;
   transcodes: TranscodeDoctor;
   trending: TrendingService;
+  shares: RecapShares;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -102,7 +104,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -131,6 +133,14 @@ export function createApp(
   app.get('/api/health', (c) => {
     const { fetchedAt, error } = monitor.current();
     return c.json({ status: error ? 'degraded' : 'ok', fetchedAt, error });
+  });
+
+  // A shared recap link works without signing in, and shows only that recap.
+  app.get('/api/public/recap/:token', (c) => {
+    c.header('Cache-Control', 'no-store');
+    c.header('X-Robots-Tag', 'noindex');
+    const recap = shares.open(c.req.param('token'));
+    return recap ? c.json(recap) : c.json({ error: 'This link doesn’t work any more. Ask for a new one.' }, 404);
   });
 
   // Sign-in. Everything under /api below this needs a signed-in session.
@@ -180,6 +190,28 @@ export function createApp(
       if (s.egressNode) streamsByNode.set(s.egressNode, (streamsByNode.get(s.egressNode) ?? 0) + 1);
     }
     return c.json(overview.nodeList(streamsByNode));
+  });
+
+  app.get('/api/recap/shares', requirePermission('shareRecaps'), (c) => c.json({ shares: shares.list(c.req.query('user') ?? '') }));
+  app.post('/api/recap/shares', requirePermission('shareRecaps'), async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { user?: unknown; year?: unknown };
+    const year = Number(body.year);
+    if (typeof body.user !== 'string' || !Number.isInteger(year)) return c.json({ error: 'Choose a user and a year.' }, 400);
+    try {
+      return c.json(shares.create(body.user, year, c.get('session').user.username), 201);
+    } catch (err) {
+      if (err instanceof RecapError) return c.json({ error: err.message }, 404);
+      throw err;
+    }
+  });
+  app.post('/api/recap/shares/:id/revoke', requirePermission('shareRecaps'), (c) => {
+    try {
+      shares.revoke(c.req.param('id'));
+      return c.json({ ok: true });
+    } catch (err) {
+      if (err instanceof ShareError) return c.json({ error: err.message }, 404);
+      throw err;
+    }
   });
 
   app.get('/api/recap', (c) => {
