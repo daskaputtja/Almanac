@@ -85,7 +85,7 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - Newly added movies and episodes posted to Discord, with a separate webhook for each channel and any mix of libraries per channel
 - Only post 4K, HDR or Dolby Vision copies, so a Dolby Vision channel can watch your 4K libraries
 - A 4K copy of an existing movie counts as new in the 4K library
-- Posters, summaries, ratings, runtime, quality (resolution, HDR, audio, edition) and links, from TMDB for movies and TVDB for shows (free keys, entered on the page). Without keys, posts use Silo's details
+- Posters, summaries, ratings, runtime, quality (resolution, HDR and edition) and links, from TMDB for movies and TVDB for shows (free keys, entered on the page). Without keys, posts use Silo's details
 - A show's new episodes are grouped into one post; a big import becomes one summary instead of hundreds of posts
 - Waits a little for Silo to match a new file, so posts have the right title and poster
 - A test button, a log of recent posts, and channels turn themselves off (with a note) if their webhook is deleted

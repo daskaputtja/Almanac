@@ -134,7 +134,7 @@ describe('Discord notifications', () => {
     });
     expect(embed.description).toContain('Mischief. Mayhem. Soap.');
     expect(JSON.stringify(embed.fields)).toContain('2h 19m');
-    expect(JSON.stringify(embed.fields)).toContain('1080p · DD+ 5.1');
+    expect(JSON.stringify(embed.fields)).toContain('"value":"1080p"');
     expect(JSON.stringify(embed.fields)).toContain('[IMDb](https://www.imdb.com/title/tt0137523/)');
 
     // Already posted: not again.
@@ -169,7 +169,7 @@ describe('Discord notifications', () => {
     expect(env.net.posts).toHaveLength(1);
     const embed = env.net.posts[0]!.body.embeds[0]!;
     expect(embed.author).toEqual({ name: 'New in Movies - 4K' });
-    expect(JSON.stringify(embed.fields)).toContain('IMAX · 4K · Dolby Vision · TrueHD Atmos 7.1');
+    expect(JSON.stringify(embed.fields)).toContain('"value":"IMAX · 4K · Dolby Vision"');
   });
 
   it('waits for Silo to match a new movie, but not forever', async () => {
@@ -258,7 +258,7 @@ describe('Discord notifications', () => {
 
 describe('quality', () => {
   it('describes the best copy in the library', () => {
-    expect(qualityLine([{ resolution: '2160p', dynamic_range: 'hdr10_plus', codec_audio: 'eac3', atmos: true, audio_channels: 6 }])).toBe('4K · HDR10+ · DD+ Atmos 5.1');
+    expect(qualityLine([{ resolution: '2160p', dynamic_range: 'hdr10_plus', codec_audio: 'eac3', atmos: true, audio_channels: 6 }])).toBe('4K · HDR10+');
     expect(qualityLine([])).toBeNull();
   });
 

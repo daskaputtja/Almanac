@@ -209,7 +209,7 @@ export function bestVersion(versions: SiloCatalogVersion[]): SiloCatalogVersion 
   return [...versions].sort((a, b) => (RESOLUTION_RANK[b.resolution ?? ''] ?? 0) - (RESOLUTION_RANK[a.resolution ?? ''] ?? 0))[0];
 }
 
-/** "IMAX · 4K · Dolby Vision · TrueHD Atmos 7.1" */
+/** "IMAX · 4K · Dolby Vision": the picture only, not the sound. */
 export function qualityLine(versions: SiloCatalogVersion[]): string | null {
   const v = bestVersion(versions);
   if (!v) return null;
@@ -217,7 +217,6 @@ export function qualityLine(versions: SiloCatalogVersion[]): string | null {
     v.edition ?? null,
     resolutionLabel(v.resolution),
     DYNAMIC_RANGE[(v.dynamic_range ?? '').toLowerCase()] ?? null,
-    audioLabel(v),
   ].filter(Boolean);
   if (versions.length > 1) parts.push(`${versions.length} versions`);
   return parts.length ? parts.join(' · ') : null;
@@ -236,15 +235,6 @@ function resolutionLabel(resolution?: string): string | null {
   if (resolution === '2160p') return '4K';
   if (resolution === '4320p') return '8K';
   return resolution;
-}
-
-const AUDIO: Record<string, string> = { truehd: 'TrueHD', eac3: 'DD+', ac3: 'DD', dts: 'DTS', aac: 'AAC', flac: 'FLAC', opus: 'Opus', mp3: 'MP3' };
-
-function audioLabel(v: SiloCatalogVersion): string | null {
-  const codec = v.codec_audio ? (AUDIO[v.codec_audio.toLowerCase()] ?? v.codec_audio.toUpperCase()) : null;
-  if (!codec) return null;
-  const channels = v.audio_channels === 8 ? '7.1' : v.audio_channels === 6 ? '5.1' : v.audio_channels === 2 ? 'Stereo' : null;
-  return [codec, v.atmos ? 'Atmos' : null, channels].filter(Boolean).join(' ');
 }
 
 export function episodeCode(e: SiloCatalogItem): string {
