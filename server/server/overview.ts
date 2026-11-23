@@ -67,6 +67,9 @@ export class ServerOverviewService {
          WHERE c.type IN ('movie', 'series') GROUP BY c.type`,
       )
       .all() as { type: string; items: number; libraries: number }[];
+    const catalogReady = Boolean(
+      (this.db.prepare("SELECT value FROM sync_state WHERE key = 'catalog_full_at'").get() as { value: string | null } | undefined)?.value,
+    );
     const movies = catalog.find((c) => c.type === 'movie');
     const shows = catalog.find((c) => c.type === 'series');
 
@@ -82,6 +85,7 @@ export class ServerOverviewService {
       redis: health(this.status?.health?.redis),
       nodes: enabledNodes ? { healthy: enabledNodes.filter((n) => n.healthy).length, total: enabledNodes.length } : null,
       profiles24h: profiles.n,
+      catalogReady,
       movies: { count: movies?.items ?? 0, libraries: movies?.libraries ?? 0 },
       shows: { count: shows?.items ?? 0, libraries: shows?.libraries ?? 0 },
       checkedAt: this.checkedAt,

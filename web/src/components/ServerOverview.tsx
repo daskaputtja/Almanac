@@ -34,13 +34,13 @@ export function ServerOverview() {
           icon={<IconFilm />}
           label="Total movies"
           value={data.movies.count.toLocaleString()}
-          detail={`in ${data.movies.libraries} ${data.movies.libraries === 1 ? 'library' : 'libraries'}`}
+          detail={data.catalogReady ? `in ${data.movies.libraries} ${data.movies.libraries === 1 ? 'library' : 'libraries'}` : 'so far · still copying from Silo…'}
         />
         <Tile
           icon={<IconTv />}
           label="Total shows"
           value={data.shows.count.toLocaleString()}
-          detail={`in ${data.shows.libraries} ${data.shows.libraries === 1 ? 'library' : 'libraries'}`}
+          detail={data.catalogReady ? `in ${data.shows.libraries} ${data.shows.libraries === 1 ? 'library' : 'libraries'}` : 'so far · still copying from Silo…'}
         />
       </div>
 

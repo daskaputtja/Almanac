@@ -19,6 +19,7 @@ describe('ServerOverviewService', () => {
     const o = overview.overview();
 
     expect(o.version).toBe('demo1234');
+    expect(o.catalogReady).toBe(true);
     expect(o.postgres).toEqual({ ok: true, latencyMs: 0.03 });
     expect(o.nodes).toEqual({ healthy: 4, total: 4 });
     expect(Date.now() - Date.parse(o.startedAt!)).toBeGreaterThan(18 * 3_600_000);
@@ -46,6 +47,7 @@ describe('ServerOverviewService', () => {
     failing = true;
     await overview.refresh();
     const o = overview.overview();
+    expect(o.catalogReady).toBe(false); // no catalog copied in this test
     expect(o.postgres?.ok).toBe(true);
     expect(o.problems).toEqual(['Server status: timeout']);
   });

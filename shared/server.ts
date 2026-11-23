@@ -16,6 +16,8 @@ export interface ServerOverview {
   nodes: { healthy: number; total: number } | null;
   /** Profiles that started playing something in the last 24 hours. */
   profiles24h: number;
+  /** False until the first full copy of Silo's catalog has finished; the totals below are partial until then. */
+  catalogReady: boolean;
   movies: { count: number; libraries: number };
   shows: { count: number; libraries: number };
   /** When Silo last answered; null if it never has. */
