@@ -66,8 +66,8 @@ export function RecapPage({ userId }: { userId?: string }) {
       </div>
 
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl border border-harvest-dim/50 bg-gradient-to-br from-harvest/20 via-panel to-panel p-6 sm:p-10">
-        <p className="text-sm font-medium uppercase tracking-[0.2em] text-harvest">{year} in review</p>
+      <section className="relative overflow-hidden rounded-2xl border border-accent-dim/50 bg-gradient-to-br from-accent/20 via-panel to-panel p-6 sm:p-10">
+        <p className="text-sm font-medium uppercase tracking-[0.2em] text-accent">{year} in review</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-5xl">{who} year</h1>
         {empty ? (
           <p className="mt-6 text-lg text-ink-muted">Nothing was played in {year}.</p>
@@ -79,7 +79,7 @@ export function RecapPage({ userId }: { userId?: string }) {
             </p>
             {recap.percentile != null && recap.percentile >= 50 && (
               <p className="mt-4 inline-block rounded-full bg-canvas/60 px-4 py-1.5 text-sm">
-                More than <strong className="text-harvest">{recap.percentile}%</strong> of viewers this year
+                More than <strong className="text-accent">{recap.percentile}%</strong> of viewers this year
               </p>
             )}
           </>
@@ -117,7 +117,7 @@ export function RecapPage({ userId }: { userId?: string }) {
           <section className="rounded-2xl border border-line bg-panel p-5">
             <h2 className="mb-3 font-semibold">Hours watched each month</h2>
             <StackedBars
-              series={[{ key: 'hours', label: 'Hours watched', color: 'var(--color-harvest)' }]}
+              series={[{ key: 'hours', label: 'Hours watched', color: 'var(--color-accent)' }]}
               bars={local.months.map((m) => ({ id: m.label, label: m.short, title: m.label, values: { hours: Math.round(m.hours) } }))}
               label="Hours watched each month"
               height={220}
@@ -179,7 +179,7 @@ export function RecapPage({ userId }: { userId?: string }) {
                 {recap.server.topUsers.map((u, i) => (
                   <li key={u.id} className="flex items-baseline gap-3">
                     <span className="w-5 text-right text-sm tabular-nums text-ink-faint">{i + 1}</span>
-                    <Link to={`/users/${encodeURIComponent(u.id)}/recap?year=${year}`} className="font-medium text-harvest hover:underline">
+                    <Link to={`/users/${encodeURIComponent(u.id)}/recap?year=${year}`} className="font-medium text-accent hover:underline">
                       {u.name}
                     </Link>
                     <span className="ml-auto tabular-nums">{Math.round(u.watchedSeconds / 3600).toLocaleString()} hours</span>
@@ -207,7 +207,7 @@ function Big({ value, label }: { value: string; label: string }) {
 function Fact({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="rounded-2xl border border-line bg-panel p-5">
-      <p className="text-xs font-medium uppercase tracking-wider text-harvest">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wider text-accent">{label}</p>
       <p className="mt-2 text-lg font-semibold leading-snug">{value}</p>
       {detail && <p className="mt-1 text-sm text-ink-muted">{detail}</p>}
     </div>
@@ -223,7 +223,7 @@ function TopTitles({ title, titles }: { title: string; titles: RecapTitle[] }) {
       <div className="flex gap-4">
         <Poster url={first!.posterUrl} title={first!.title} large />
         <div className="min-w-0 self-end">
-          <p className="text-xs font-semibold uppercase tracking-wider text-harvest">Number 1</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-accent">Number 1</p>
           <p className="mt-1 text-xl font-bold leading-tight">{first!.title}</p>
           <p className="mt-1 text-sm text-ink-muted">
             {hoursText(first!.watchedSeconds)}

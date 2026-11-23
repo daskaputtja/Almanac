@@ -3,18 +3,19 @@
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-  --color-canvas: #0f0e0d;
-  --color-panel: #1a1816;
-  --color-panel-raised: #23201d;
-  --color-line: #2e2a26;
-  --color-ink: #f2ede6;
-  --color-ink-muted: #a8a097;
-  --color-ink-faint: #6f685f;
-  --color-harvest: #f5b041;
-  --color-harvest-dim: #8a6424;
+  /* Stealth: near-black surfaces, neutral greys, one red accent. */
+  --color-canvas: #0a0a0a;
+  --color-panel: #121212;
+  --color-panel-raised: #1b1b1b;
+  --color-line: #262626;
+  --color-ink: #ededed;
+  --color-ink-muted: #a3a3a3;
+  --color-ink-faint: #737373;
+  --color-accent: #ef4444;
+  --color-accent-dim: #7f1d1d;
 
   /* Playback methods, in this order. Checked with a colour-blindness
-     validator on the panel colour; keep the order if you change them. */
+     validator on the panel colour (#121212); keep the order if you change them. */
   --color-direct: #3987e5;
   --color-stream: #199e70;
   --color-remux: #9085e9;

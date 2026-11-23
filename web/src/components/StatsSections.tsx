@@ -195,7 +195,7 @@ export function PlaysTimelineCard({ view }: { view: StatsView }) {
       ) : (
         <StackedBars series={SERIES} bars={view.bars} label={title} formatValue={(v) => formatCompact(v)} />
       )}
-      <button type="button" onClick={() => setShowTable(!showTable)} className="mt-2 text-xs text-harvest hover:underline">
+      <button type="button" onClick={() => setShowTable(!showTable)} className="mt-2 text-xs text-accent hover:underline">
         {showTable ? 'Show as chart' : 'Show as table'}
       </button>
     </section>

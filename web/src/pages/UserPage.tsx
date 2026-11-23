@@ -72,7 +72,7 @@ export function UserPage({ userId }: { userId: string }) {
     return (
       <div className="py-20 text-center">
         <p className="font-medium">No user with that ID</p>
-        <Link to="/users" className="mt-2 inline-block text-sm text-harvest hover:underline">
+        <Link to="/users" className="mt-2 inline-block text-sm text-accent hover:underline">
           Back to all users
         </Link>
       </div>
@@ -95,7 +95,7 @@ export function UserPage({ userId }: { userId: string }) {
               <UserTags userId={user.id} />
               <Link
                 to={`/users/${encodeURIComponent(user.id)}/recap?year=${new Date().getFullYear()}`}
-                className="ml-1 rounded-lg border border-harvest-dim bg-harvest/10 px-2.5 py-1 text-xs font-medium hover:bg-harvest/20"
+                className="ml-1 rounded-lg border border-accent-dim bg-accent/10 px-2.5 py-1 text-xs font-medium hover:bg-accent/20"
               >
                 {new Date().getFullYear()} recap
               </Link>
@@ -153,7 +153,7 @@ export function UserPage({ userId }: { userId: string }) {
       <section className="rounded-xl border border-line bg-panel">
         <div className="flex items-center justify-between px-4 pt-4">
           <h2 className="text-sm font-semibold">Recent plays</h2>
-          <Link to={`/history?user=${encodeURIComponent(userId)}`} className="text-sm text-harvest hover:underline">
+          <Link to={`/history?user=${encodeURIComponent(userId)}`} className="text-sm text-accent hover:underline">
             See all in History
           </Link>
         </div>

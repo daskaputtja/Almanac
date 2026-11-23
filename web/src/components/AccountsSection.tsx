@@ -21,7 +21,7 @@ interface PendingAction {
   run: (code: string, password: string) => Promise<void>;
 }
 
-const input = 'rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none';
+const input = 'rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none';
 
 /** Settings → Accounts: admins add, change and remove Almanac accounts. */
 export function AccountsSection({ onSelfChanged }: { onSelfChanged: () => void }) {
@@ -56,7 +56,7 @@ export function AccountsSection({ onSelfChanged }: { onSelfChanged: () => void }
           <p className="mt-1 text-sm text-ink-muted">Who can sign in to Almanac. Changes need a code from your authenticator app.</p>
         </div>
         {!adding && (
-          <button type="button" onClick={() => setAdding(true)} className="rounded-lg bg-harvest px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110">
+          <button type="button" onClick={() => setAdding(true)} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110">
             Add account
           </button>
         )}
@@ -201,7 +201,7 @@ function SmallButton({ onClick, danger, children }: { onClick: () => void; dange
     <button
       type="button"
       onClick={onClick}
-      className={`whitespace-nowrap rounded-md border border-line px-2 py-1 ${danger ? 'hover:border-red-800 hover:text-red-200' : 'hover:border-harvest-dim'}`}
+      className={`whitespace-nowrap rounded-md border border-line px-2 py-1 ${danger ? 'hover:border-red-800 hover:text-red-200' : 'hover:border-accent-dim'}`}
     >
       {children}
     </button>
@@ -250,10 +250,10 @@ function AddAccountForm({ onSubmit, onCancel }: { onSubmit: (username: string, p
         At least 12 characters. They can change it in Settings after signing in, and they’ll set up their own 2FA at first sign-in.
       </p>
       <div className="flex gap-2 sm:col-span-3">
-        <button type="submit" className="rounded-lg bg-harvest px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110">
+        <button type="submit" className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110">
           Continue
         </button>
-        <button type="button" onClick={onCancel} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-harvest-dim">
+        <button type="button" onClick={onCancel} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent-dim">
           Cancel
         </button>
       </div>
@@ -286,7 +286,7 @@ function ConfirmPanel({ action, onCancel }: { action: PendingAction; onCancel: (
       onSubmit={submit}
       role="dialog"
       aria-label={action.title}
-      className={`mt-4 space-y-3 rounded-lg border p-4 ${action.danger ? 'border-red-900/70 bg-red-950/20' : 'border-harvest-dim/60 bg-harvest/5'}`}
+      className={`mt-4 space-y-3 rounded-lg border p-4 ${action.danger ? 'border-red-900/70 bg-red-950/20' : 'border-accent-dim/60 bg-accent/5'}`}
     >
       <p className="font-medium">{action.title}</p>
       <div className="flex flex-wrap items-end gap-3">
@@ -321,11 +321,11 @@ function ConfirmPanel({ action, onCancel }: { action: PendingAction; onCancel: (
         <button
           type="submit"
           disabled={busy}
-          className={`rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60 ${action.danger ? 'bg-red-700 text-white hover:bg-red-600' : 'bg-harvest text-canvas hover:brightness-110'}`}
+          className={`rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-60 ${action.danger ? 'bg-red-700 text-white hover:bg-red-600' : 'bg-accent text-canvas hover:brightness-110'}`}
         >
           Confirm
         </button>
-        <button type="button" onClick={onCancel} className="rounded-lg border border-line px-3 py-2 text-sm hover:border-harvest-dim">
+        <button type="button" onClick={onCancel} className="rounded-lg border border-line px-3 py-2 text-sm hover:border-accent-dim">
           Cancel
         </button>
       </div>

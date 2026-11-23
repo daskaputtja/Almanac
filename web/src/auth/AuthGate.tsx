@@ -53,7 +53,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
         <p className="font-medium">Can’t reach the Almanac server.</p>
-        <button type="button" onClick={refresh} className="text-sm text-harvest hover:underline">
+        <button type="button" onClick={refresh} className="text-sm text-accent hover:underline">
           Try again
         </button>
       </main>

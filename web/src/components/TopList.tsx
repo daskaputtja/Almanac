@@ -37,7 +37,7 @@ export function TopList({ title, entries, rankBy, formatName = (e) => e.name, li
                   <div className="flex items-baseline justify-between gap-3 text-sm">
                     <span className="min-w-0">
                       {linkTo ? (
-                        <Link to={linkTo(e)} className="block truncate hover:text-harvest hover:underline" title={formatName(e)}>
+                        <Link to={linkTo(e)} className="block truncate hover:text-accent hover:underline" title={formatName(e)}>
                           {formatName(e)}
                         </Link>
                       ) : (
@@ -53,7 +53,7 @@ export function TopList({ title, entries, rankBy, formatName = (e) => e.name, li
                     </span>
                   </div>
                   <div className="mt-1 h-1 rounded-full bg-panel-raised">
-                    <div className="h-full rounded-full bg-harvest-dim" style={{ width: `${(metric(e) / max) * 100}%` }} />
+                    <div className="h-full rounded-full bg-accent-dim" style={{ width: `${(metric(e) / max) * 100}%` }} />
                   </div>
                 </div>
               </li>

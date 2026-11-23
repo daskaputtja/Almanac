@@ -62,7 +62,7 @@ export function ModerationPage() {
             type="button"
             aria-pressed={group === g}
             onClick={() => setParam('group', group === g ? null : g)}
-            className={`rounded-xl border bg-panel p-4 text-left transition-colors hover:border-harvest-dim ${group === g ? 'border-harvest' : 'border-line'}`}
+            className={`rounded-xl border bg-panel p-4 text-left transition-colors hover:border-accent-dim ${group === g ? 'border-accent' : 'border-line'}`}
           >
             <p className="text-2xl font-semibold tabular-nums">{groupCounts[g]}</p>
             <p className="text-sm font-medium">{GROUP_LABELS[g].title}</p>
@@ -92,7 +92,7 @@ export function ModerationPage() {
           ))}
         </div>
         {group && (
-          <button type="button" onClick={() => setParam('group', null)} className="text-sm text-harvest hover:underline">
+          <button type="button" onClick={() => setParam('group', null)} className="text-sm text-accent hover:underline">
             Show all kinds
           </button>
         )}

@@ -75,7 +75,7 @@ function TagEditor({ userId }: { userId: string }) {
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="mr-1 text-sm text-ink-muted">Tags</span>
         {tags.map((t) => (
-          <span key={t} className="inline-flex items-center gap-1 rounded-full border border-harvest-dim/60 bg-harvest/10 py-0.5 pl-2 pr-1 text-xs text-ink">
+          <span key={t} className="inline-flex items-center gap-1 rounded-full border border-accent-dim/60 bg-accent/10 py-0.5 pl-2 pr-1 text-xs text-ink">
             {t}
             <button
               type="button"
@@ -100,7 +100,7 @@ function TagEditor({ userId }: { userId: string }) {
             placeholder="Add a tag"
             aria-label="Add a tag"
             list={`tag-suggestions-${userId}`}
-            className="w-32 rounded-full border border-line bg-canvas px-2.5 py-0.5 text-xs placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+            className="w-32 rounded-full border border-line bg-canvas px-2.5 py-0.5 text-xs placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
           />
           <datalist id={`tag-suggestions-${userId}`}>
             {suggestions.map((t) => (
@@ -112,7 +112,7 @@ function TagEditor({ userId }: { userId: string }) {
       {tags.length === 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
           {suggestions.slice(0, 6).map((t) => (
-            <button key={t} type="button" onClick={() => add(t)} className="rounded-full border border-dashed border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-harvest-dim hover:text-ink">
+            <button key={t} type="button" onClick={() => add(t)} className="rounded-full border border-dashed border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-accent-dim hover:text-ink">
               + {t}
             </button>
           ))}
@@ -168,10 +168,10 @@ function Notes({ userId, username }: { userId: string; username: string }) {
           maxLength={4000}
           placeholder={`Add a note about ${username} for other admins and mods`}
           aria-label="New note"
-          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
         />
         {body.trim() && (
-          <button type="submit" disabled={busy} className="rounded-lg bg-harvest px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
+          <button type="submit" disabled={busy} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
             Add note
           </button>
         )}
@@ -217,10 +217,10 @@ function Notes({ userId, username }: { userId: string; username: string }) {
                   value={editing.body}
                   onChange={(e) => setEditing({ id: n.id, body: e.target.value })}
                   aria-label="Edit note"
-                  className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus:border-harvest-dim focus:outline-none"
+                  className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus:border-accent-dim focus:outline-none"
                 />
                 <div className="flex gap-2 text-sm">
-                  <button type="submit" disabled={busy} className="rounded-lg bg-harvest px-3 py-1 font-semibold text-canvas">
+                  <button type="submit" disabled={busy} className="rounded-lg bg-accent px-3 py-1 font-semibold text-canvas">
                     Save
                   </button>
                   <button type="button" onClick={() => setEditing(null)} className="rounded-lg border border-line px-3 py-1">

@@ -48,7 +48,7 @@ export function StreamCard({ stream, position, liveNetworks = 1 }: Props) {
           </div>
 
           <p className="mt-1 truncate text-sm">
-            <Link to={`/users/${encodeURIComponent(stream.user.id)}`} className="font-medium text-harvest hover:underline">
+            <Link to={`/users/${encodeURIComponent(stream.user.id)}`} className="font-medium text-accent hover:underline">
               {stream.user.name}
             </Link>
             {stream.user.profileName && stream.user.profileName !== 'Main' && (
@@ -133,7 +133,7 @@ export function StreamCard({ stream, position, liveNetworks = 1 }: Props) {
           aria-valuenow={Math.round(percent)}
         >
           <div
-            className={`h-full transition-[width] duration-1000 ease-linear ${stream.progress.paused ? 'bg-ink-faint' : 'bg-harvest'}`}
+            className={`h-full transition-[width] duration-1000 ease-linear ${stream.progress.paused ? 'bg-ink-faint' : 'bg-accent'}`}
             style={{ width: `${percent}%` }}
           />
         </div>
@@ -191,7 +191,7 @@ function Poster({ url, title }: { url: string | null; title: string }) {
 function StateIcon({ paused }: { paused: boolean }) {
   return (
     <span
-      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${paused ? 'bg-panel-raised text-ink-muted' : 'bg-harvest/15 text-harvest'}`}
+      className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${paused ? 'bg-panel-raised text-ink-muted' : 'bg-accent/15 text-accent'}`}
       title={paused ? 'Paused' : 'Playing'}
     >
       {paused ? (

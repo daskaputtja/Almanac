@@ -8,7 +8,7 @@ export function UserTags({ userId, className = '' }: { userId: string; className
   return (
     <span className={`inline-flex flex-wrap gap-1 align-middle ${className}`}>
       {tags.map((t) => (
-        <span key={t} className="rounded-full border border-harvest-dim/60 bg-harvest/10 px-1.5 py-px text-[10px] font-medium leading-4 text-ink">
+        <span key={t} className="rounded-full border border-accent-dim/60 bg-accent/10 px-1.5 py-px text-[10px] font-medium leading-4 text-ink">
           {t}
         </span>
       ))}

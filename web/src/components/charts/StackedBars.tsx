@@ -70,7 +70,7 @@ export function StackedBars<K extends string>({
           role="img"
           aria-label={`${label}. Use the left and right arrow keys to read each bar.`}
           tabIndex={0}
-          className="block rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-harvest"
+          className="block rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           onKeyDown={(e) => {
             if (e.key === 'ArrowRight') move(1);
             else if (e.key === 'ArrowLeft') move(-1);

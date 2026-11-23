@@ -76,8 +76,8 @@ export function LibrariesPage() {
       </div>
 
       {data && !data.status.ready && (
-        <div role="status" className="flex items-center gap-3 rounded-lg border border-harvest-dim/60 bg-harvest/10 px-4 py-3 text-sm">
-          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-harvest border-t-transparent" aria-hidden="true" />
+        <div role="status" className="flex items-center gap-3 rounded-lg border border-accent-dim/60 bg-accent/10 px-4 py-3 text-sm">
+          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden="true" />
           Copying your catalog from Silo. Counts will fill in over the next few minutes.
         </div>
       )}
@@ -129,7 +129,7 @@ export function LibrariesPage() {
             onChange={(v) => setParam({ days: v === '30' ? null : v })}
           />
           {selected && (
-            <button type="button" onClick={() => setParam({ library: null })} className="text-sm text-harvest hover:underline">
+            <button type="button" onClick={() => setParam({ library: null })} className="text-sm text-accent hover:underline">
               Show all libraries
             </button>
           )}
@@ -160,7 +160,7 @@ function LibraryCard({ library, selected, onSelect }: { library: LibrarySummary;
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
-      className={`rounded-xl border bg-panel p-4 text-left transition-colors hover:border-harvest-dim ${selected ? 'border-harvest' : 'border-line'}`}
+      className={`rounded-xl border bg-panel p-4 text-left transition-colors hover:border-accent-dim ${selected ? 'border-accent' : 'border-line'}`}
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-semibold">{library.name}</h3>

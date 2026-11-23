@@ -63,7 +63,7 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
 
       {showUser && (
         <p className="mt-2 text-sm">
-          <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="font-semibold text-harvest hover:underline">
+          <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="font-semibold text-accent hover:underline">
             {flag.username}
           </Link>{' '}
           <UserTags userId={flag.userId} />
@@ -108,15 +108,15 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="e.g. Family in two houses, OK’d by admin. Or: warned them on Discord."
-              className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+              className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
             />
           </label>
           <p className="text-xs text-ink-faint">This is saved as a note on {flag.username} too.</p>
           <div className="flex gap-2">
-            <button type="submit" disabled={busy} className="rounded-lg bg-harvest px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
+            <button type="submit" disabled={busy} className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
               Mark as reviewed
             </button>
-            <button type="button" onClick={() => setReviewing(false)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-harvest-dim">
+            <button type="button" onClick={() => setReviewing(false)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent-dim">
               Cancel
             </button>
           </div>
@@ -124,7 +124,7 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
       ) : (
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           {flag.status === 'open' ? (
-            <button type="button" onClick={() => setReviewing(true)} className="rounded-lg border border-line px-3 py-1.5 hover:border-harvest-dim">
+            <button type="button" onClick={() => setReviewing(true)} className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim">
               Mark as reviewed
             </button>
           ) : (
@@ -132,13 +132,13 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
               type="button"
               disabled={busy}
               onClick={() => void act(`/api/moderation/flags/${encodeURIComponent(flag.id)}/reopen`)}
-              className="rounded-lg border border-line px-3 py-1.5 hover:border-harvest-dim"
+              className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim"
             >
               Reopen
             </button>
           )}
           {showUser && (
-            <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="rounded-lg border border-line px-3 py-1.5 hover:border-harvest-dim">
+            <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim">
               View user
             </Link>
           )}

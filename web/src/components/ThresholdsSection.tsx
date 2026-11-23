@@ -121,12 +121,12 @@ export function ThresholdsSection() {
         {message && <p className={`text-sm ${message.ok ? 'text-ink' : 'text-red-300'}`}>{message.text}</p>}
         <div className="ml-auto flex gap-2">
           {!isDefault && saved && (
-            <button type="button" onClick={() => setDraft(saved.defaults)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-harvest-dim">
+            <button type="button" onClick={() => setDraft(saved.defaults)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent-dim">
               Reset to defaults
             </button>
           )}
           {changed && saved && (
-            <button type="button" onClick={() => setDraft(saved.thresholds)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-harvest-dim">
+            <button type="button" onClick={() => setDraft(saved.thresholds)} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent-dim">
               Undo changes
             </button>
           )}
@@ -134,7 +134,7 @@ export function ThresholdsSection() {
             type="button"
             disabled={!changed || Boolean(problem) || busy}
             onClick={() => void save()}
-            className="rounded-lg bg-harvest px-4 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg bg-accent px-4 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save thresholds
           </button>
@@ -158,7 +158,7 @@ function ThresholdRow({
     <div className={`grid gap-3 rounded-lg border border-line/70 bg-canvas/40 p-3 sm:grid-cols-[1fr_auto] ${value.enabled ? '' : 'opacity-60'}`}>
       <div>
         <label className="flex items-center gap-2 text-sm font-medium">
-          <input type="checkbox" checked={value.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} className="h-4 w-4 accent-harvest" />
+          <input type="checkbox" checked={value.enabled} onChange={(e) => onChange({ enabled: e.target.checked })} className="h-4 w-4 accent-accent" />
           {info.label}
         </label>
         <p className="mt-0.5 pl-6 text-xs text-ink-faint">{info.description}</p>
@@ -177,7 +177,7 @@ function ThresholdRow({
                 disabled={!value.enabled}
                 value={value[level] ?? ''}
                 onChange={(e) => onChange({ [level]: e.target.value === '' ? undefined : Number(e.target.value) })}
-                className="w-20 rounded-lg border border-line bg-canvas px-2 py-1 text-sm tabular-nums text-ink focus:border-harvest-dim focus:outline-none"
+                className="w-20 rounded-lg border border-line bg-canvas px-2 py-1 text-sm tabular-nums text-ink focus:border-accent-dim focus:outline-none"
               />
               <span className="whitespace-nowrap">+ {info.unit}</span>
             </span>

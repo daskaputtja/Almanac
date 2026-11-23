@@ -100,14 +100,14 @@ export function UsersPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search users"
           aria-label="Search users"
-          className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none sm:w-72"
+          className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none sm:w-72"
         />
         <select
           aria-label="Show"
           value={show}
           onChange={(e) => setParam({ show: e.target.value === 'all' ? null : e.target.value })}
-          className={`rounded-lg border bg-panel px-2 py-2 text-sm focus:border-harvest-dim focus:outline-none ${
-            show !== 'all' ? 'border-harvest-dim text-ink' : 'border-line text-ink-muted'
+          className={`rounded-lg border bg-panel px-2 py-2 text-sm focus:border-accent-dim focus:outline-none ${
+            show !== 'all' ? 'border-accent-dim text-ink' : 'border-line text-ink-muted'
           }`}
         >
           {Object.entries(SHOW_LABELS).map(([key, label]) => (
@@ -151,7 +151,7 @@ export function UsersPage() {
                       <Link
                         to={`/users/${encodeURIComponent(u.id)}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-harvest hover:underline"
+                        className="font-medium text-accent hover:underline"
                       >
                         {u.name}
                       </Link>
@@ -190,7 +190,7 @@ export function UsersPage() {
           <button
             type="button"
             onClick={() => setVisible(visible + PAGE)}
-            className="rounded-lg border border-line bg-panel px-4 py-2 text-sm hover:border-harvest-dim"
+            className="rounded-lg border border-line bg-panel px-4 py-2 text-sm hover:border-accent-dim"
           >
             Show more ({(filtered.length - visible).toLocaleString()} left)
           </button>
@@ -220,7 +220,7 @@ function Th({
     <th className={`px-3 py-2.5 font-medium ${align === 'right' ? 'text-right' : ''}`} aria-sort={active ? (reverse ? 'ascending' : 'descending') : 'none'}>
       <button type="button" onClick={() => onSort(sortKey)} className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink ${active ? 'text-ink' : ''}`}>
         {label}
-        <span aria-hidden="true" className={active ? 'text-harvest' : 'invisible'}>
+        <span aria-hidden="true" className={active ? 'text-accent' : 'invisible'}>
           {reverse && active ? '↑' : '↓'}
         </span>
       </button>

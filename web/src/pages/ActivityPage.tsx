@@ -87,7 +87,7 @@ export function ActivityPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={canSeeIps ? 'Search user, title, player or IP' : 'Search user, title or player'}
-            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none sm:max-w-xs"
+            className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none sm:max-w-xs"
           />
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by playback">
             <FilterChip active={method === 'all'} onClick={() => setMethod('all')}>
@@ -106,7 +106,7 @@ export function ActivityPage() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
-              className="rounded-lg border border-line bg-panel px-2 py-1.5 text-ink focus:border-harvest-dim focus:outline-none"
+              className="rounded-lg border border-line bg-panel px-2 py-1.5 text-ink focus:border-accent-dim focus:outline-none"
             >
               {(Object.keys(SORTS) as SortKey[]).map((key) => (
                 <option key={key} value={key}>
@@ -147,7 +147,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
       onClick={onClick}
       aria-pressed={active}
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-        active ? 'border-harvest-dim bg-harvest/10 text-ink' : 'border-line bg-panel text-ink-muted hover:text-ink'
+        active ? 'border-accent-dim bg-accent/10 text-ink' : 'border-line bg-panel text-ink-muted hover:text-ink'
       }`}
     >
       {children}

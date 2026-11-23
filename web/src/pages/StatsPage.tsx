@@ -70,7 +70,7 @@ export function StatsPage() {
         </div>
         <Link
           to={`/recap?year=${new Date().getFullYear()}`}
-          className="rounded-lg border border-harvest-dim bg-harvest/10 px-3 py-1.5 text-sm font-medium hover:bg-harvest/20"
+          className="rounded-lg border border-accent-dim bg-accent/10 px-3 py-1.5 text-sm font-medium hover:bg-accent/20"
         >
           {new Date().getFullYear()} recap
         </Link>
@@ -83,8 +83,8 @@ export function StatsPage() {
           aria-label="User"
           value={filters.user}
           onChange={(e) => update({ user: e.target.value })}
-          className={`rounded-lg border bg-panel px-2 py-2 text-sm focus:border-harvest-dim focus:outline-none ${
-            filters.user ? 'border-harvest-dim text-ink' : 'border-line text-ink-muted'
+          className={`rounded-lg border bg-panel px-2 py-2 text-sm focus:border-accent-dim focus:outline-none ${
+            filters.user ? 'border-accent-dim text-ink' : 'border-line text-ink-muted'
           }`}
         >
           <option value="">All users</option>
@@ -95,7 +95,7 @@ export function StatsPage() {
           ))}
         </select>
         {selectedUser && (
-          <Link to={`/users/${encodeURIComponent(selectedUser.id)}`} className="text-sm text-harvest hover:underline">
+          <Link to={`/users/${encodeURIComponent(selectedUser.id)}`} className="text-sm text-accent hover:underline">
             View {selectedUser.name}’s page
           </Link>
         )}

@@ -136,7 +136,7 @@ function UserMenu() {
         <span className="hidden sm:inline">{state.user?.username}</span>
         <span className="relative inline-flex h-7 w-7 items-center justify-center rounded-full border border-line bg-panel-raised text-[11px] font-semibold uppercase">
           {state.user?.username.slice(0, 2)}
-          {lowOnCodes && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-harvest" aria-label="Running low on recovery codes" />}
+          {lowOnCodes && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-accent" aria-label="Running low on recovery codes" />}
         </span>
       </button>
       {open && (
@@ -146,7 +146,7 @@ function UserMenu() {
           </p>
           <Link to="/settings" role="menuitem" onClick={() => setOpen(false)} className="block px-3 py-2 hover:bg-panel">
             Settings
-            {lowOnCodes && <span className="block text-xs text-harvest">Running low on recovery codes</span>}
+            {lowOnCodes && <span className="block text-xs text-accent">Running low on recovery codes</span>}
           </Link>
           <button type="button" role="menuitem" onClick={() => void signOut()} className="block w-full px-3 py-2 text-left hover:bg-panel">
             Sign out

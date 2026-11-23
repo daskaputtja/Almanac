@@ -82,7 +82,7 @@ function Sessions() {
             <div className="min-w-0 flex-1">
               <p className="font-medium">
                 {describeBrowser(s.userAgent)}
-                {s.current && <span className="ml-2 rounded border border-harvest-dim px-1.5 py-px text-[11px] text-harvest">This device</span>}
+                {s.current && <span className="ml-2 rounded border border-accent-dim px-1.5 py-px text-[11px] text-accent">This device</span>}
               </p>
               <p className="text-xs text-ink-faint">
                 {s.ip ?? 'Unknown address'} · signed in {formatWhen(s.createdAt)} · last active {formatWhen(s.lastSeenAt)}
@@ -112,7 +112,7 @@ function CodeField({ value, onChange }: { value: string; onChange: (v: string) =
         value={value}
         onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))}
         placeholder="123456"
-        className="mt-1 w-40 rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-sm tracking-widest placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+        className="mt-1 w-40 rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-sm tracking-widest placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
       />
     </label>
   );
@@ -149,7 +149,7 @@ function RecoverySection({ left, onChange }: { left: number; onChange: () => voi
       ) : (
         <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
           <CodeField value={code} onChange={setCode} />
-          <button type="submit" disabled={busy} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-harvest-dim disabled:opacity-60">
+          <button type="submit" disabled={busy} className="rounded-lg border border-line px-4 py-2 text-sm hover:border-accent-dim disabled:opacity-60">
             Make new recovery codes
           </button>
           {error && <p className="w-full text-sm text-red-300">{error}</p>}
@@ -186,7 +186,7 @@ function PasswordSection() {
     }
   };
 
-  const input = 'mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus:border-harvest-dim focus:outline-none';
+  const input = 'mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm focus:border-accent-dim focus:outline-none';
   return (
     <Card title="Change password" description="Changing it signs you out everywhere else.">
       <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -208,7 +208,7 @@ function PasswordSection() {
         </div>
         {message && <p className={`text-sm sm:col-span-2 ${message.ok ? 'text-ink' : 'text-red-300'}`}>{message.text}</p>}
         <div className="sm:col-span-2">
-          <button type="submit" disabled={busy} className="rounded-lg bg-harvest px-4 py-2 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
+          <button type="submit" disabled={busy} className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60">
             Change password
           </button>
         </div>

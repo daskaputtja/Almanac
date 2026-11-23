@@ -71,7 +71,7 @@ function Field({
         {...input}
         id={id}
         aria-describedby={hint ? `${id}-hint` : undefined}
-        className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+        className="mt-1 w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
       />
       {hint && (
         <p id={`${id}-hint`} className="mt-1 text-xs text-ink-faint">
@@ -96,7 +96,7 @@ function SubmitButton({ busy, children }: { busy: boolean; children: React.React
     <button
       type="submit"
       disabled={busy}
-      className="w-full rounded-lg bg-harvest px-4 py-2.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60"
+      className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:opacity-60"
     >
       {busy ? 'One moment…' : children}
     </button>
@@ -186,7 +186,7 @@ function CodeInput({ value, onChange, onComplete }: { value: string; onChange: (
         onChange(digits);
         if (digits.length === 6) setTimeout(onComplete, 0);
       }}
-      className="w-full rounded-lg border border-line bg-canvas px-3 py-3 text-center font-mono text-2xl tracking-[0.4em] placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none"
+      className="w-full rounded-lg border border-line bg-canvas px-3 py-3 text-center font-mono text-2xl tracking-[0.4em] placeholder:text-ink-faint focus:border-accent-dim focus:outline-none"
     />
   );
 }
@@ -223,7 +223,7 @@ function CodeForm({ onDone, onRestart }: { onDone: () => void; onRestart: () => 
         <SubmitButton busy={busy}>Sign in</SubmitButton>
       </form>
       <div className="mt-4 flex justify-between text-sm">
-        <button type="button" onClick={() => setUseRecovery(!useRecovery)} className="text-harvest hover:underline">
+        <button type="button" onClick={() => setUseRecovery(!useRecovery)} className="text-accent hover:underline">
           {useRecovery ? 'Use my authenticator app' : 'Use a recovery code'}
         </button>
         <button
@@ -269,7 +269,7 @@ function EnrollForm({ username, onDone, onRestart }: { username: string; onDone:
       {loadError ? (
         <>
           <ErrorText error={loadError} />
-          <button type="button" onClick={onRestart} className="mt-4 text-sm text-harvest hover:underline">
+          <button type="button" onClick={onRestart} className="mt-4 text-sm text-accent hover:underline">
             Start again
           </button>
         </>
@@ -299,7 +299,7 @@ function EnrollForm({ username, onDone, onRestart }: { username: string; onDone:
                     </code>
                   </div>
                 ) : (
-                  <button type="button" onClick={() => setShowKey(true)} className="text-xs text-harvest hover:underline">
+                  <button type="button" onClick={() => setShowKey(true)} className="text-xs text-accent hover:underline">
                     Can’t scan it? Show the key
                   </button>
                 )}
@@ -349,7 +349,7 @@ export function RecoveryCodes({ codes, onDone, doneLabel = 'Continue to Almanac'
         ))}
       </ul>
       <div className="flex gap-2">
-        <button type="button" onClick={download} className="flex-1 rounded-lg border border-line px-3 py-2 hover:border-harvest-dim">
+        <button type="button" onClick={download} className="flex-1 rounded-lg border border-line px-3 py-2 hover:border-accent-dim">
           Download
         </button>
         <button
@@ -360,20 +360,20 @@ export function RecoveryCodes({ codes, onDone, doneLabel = 'Continue to Almanac'
               setSaved(true);
             })
           }
-          className="flex-1 rounded-lg border border-line px-3 py-2 hover:border-harvest-dim"
+          className="flex-1 rounded-lg border border-line px-3 py-2 hover:border-accent-dim"
         >
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
       <label className="flex items-center gap-2">
-        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="h-4 w-4 accent-harvest" />
+        <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} className="h-4 w-4 accent-accent" />
         I’ve saved these codes somewhere safe
       </label>
       <button
         type="button"
         disabled={!saved}
         onClick={onDone}
-        className="w-full rounded-lg bg-harvest px-4 py-2.5 font-semibold text-canvas hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full rounded-lg bg-accent px-4 py-2.5 font-semibold text-canvas hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {doneLabel}
       </button>

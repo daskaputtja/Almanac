@@ -30,7 +30,7 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
         role="img"
         aria-label={`${label}. Use the arrow keys to read each hour.`}
         tabIndex={0}
-        className="relative rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-harvest"
+        className="relative rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
         onPointerLeave={() => setActive(null)}
         onBlur={() => setActive(null)}
         onKeyDown={(e) => {
@@ -54,7 +54,7 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
                     onPointerEnter={() => setActive([day, hour])}
                     className={`aspect-square min-h-3 rounded-[3px] bg-panel-raised ${isActive ? 'ring-2 ring-ink' : ''}`}
                   >
-                    <div className="h-full w-full rounded-[3px] bg-harvest" style={{ opacity: shade(value) }} />
+                    <div className="h-full w-full rounded-[3px] bg-accent" style={{ opacity: shade(value) }} />
                   </div>
                 );
               })}
@@ -92,7 +92,7 @@ export function WeekHourHeatmap({ grid, label }: { grid: number[][]; label: stri
         <span className="flex gap-[2px]" aria-hidden="true">
           {[0.12, 0.34, 0.56, 0.78, 1].map((o) => (
             <span key={o} className="h-3 w-3 rounded-[3px] bg-panel-raised">
-              <span className="block h-full w-full rounded-[3px] bg-harvest" style={{ opacity: o }} />
+              <span className="block h-full w-full rounded-[3px] bg-accent" style={{ opacity: o }} />
             </span>
           ))}
         </span>

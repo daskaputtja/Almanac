@@ -187,8 +187,8 @@ export function HistoryPage() {
       </div>
 
       {status && !status.import.done && (
-        <div role="status" className="flex items-center gap-3 rounded-lg border border-harvest-dim/60 bg-harvest/10 px-4 py-3 text-sm">
-          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-harvest border-t-transparent" aria-hidden="true" />
+        <div role="status" className="flex items-center gap-3 rounded-lg border border-accent-dim/60 bg-accent/10 px-4 py-3 text-sm">
+          <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-accent border-t-transparent" aria-hidden="true" />
           <span>
             Importing your play history from Silo: <strong className="tabular-nums">{status.import.imported.toLocaleString()}</strong> plays
             so far
@@ -205,7 +205,7 @@ export function HistoryPage() {
           onChange={(e) => setSearchText(e.target.value)}
           placeholder={canSeeIps ? 'Search title, user, player or IP' : 'Search title, user or player'}
           aria-label="Search history"
-          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-harvest-dim focus:outline-none lg:w-72"
+          className="w-full rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none lg:w-72"
         />
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:flex-wrap">
           <Select label="User" value={filters.user} onChange={(user) => update({ user })}>
@@ -250,7 +250,7 @@ export function HistoryPage() {
             type="checkbox"
             checked={filters.showShort}
             onChange={(e) => update({ showShort: e.target.checked })}
-            className="h-4 w-4 accent-harvest"
+            className="h-4 w-4 accent-accent"
           />
           Show plays under {SHORT_PLAY_SECONDS}s
         </label>
@@ -261,7 +261,7 @@ export function HistoryPage() {
               setSearchText('');
               navigate('/history', { replace: true });
             }}
-            className="text-sm text-harvest hover:underline"
+            className="text-sm text-accent hover:underline"
           >
             Clear filters
           </button>
@@ -354,7 +354,7 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
         <Link
           to={`/users/${encodeURIComponent(entry.user.id)}`}
           onClick={(e) => e.stopPropagation()}
-          className="font-medium text-harvest hover:underline"
+          className="font-medium text-accent hover:underline"
         >
           {entry.user.name}
         </Link>{' '}
@@ -386,7 +386,7 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
         ) : (
           <div className="flex items-center gap-2">
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-panel-raised">
-              <div className={`h-full ${entry.completed ? 'bg-ink-muted' : 'bg-harvest'}`} style={{ width: `${percent}%` }} />
+              <div className={`h-full ${entry.completed ? 'bg-ink-muted' : 'bg-accent'}`} style={{ width: `${percent}%` }} />
             </div>
             <span className="w-10 text-right text-xs tabular-nums text-ink-muted">
               {entry.completed ? 'Done' : `${Math.round(percent)}%`}
@@ -477,7 +477,7 @@ function SortHeader({
         className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-ink ${active ? 'text-ink' : ''}`}
       >
         {label}
-        <span aria-hidden="true" className={active ? 'text-harvest' : 'invisible'}>
+        <span aria-hidden="true" className={active ? 'text-accent' : 'invisible'}>
           {filters.direction === 'asc' && active ? '↑' : '↓'}
         </span>
       </button>
@@ -504,8 +504,8 @@ function Select({
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={`min-w-0 rounded-lg border bg-canvas px-2 py-2 text-sm focus:border-harvest-dim focus:outline-none ${
-        active ? 'border-harvest-dim text-ink' : 'border-line text-ink-muted'
+      className={`min-w-0 rounded-lg border bg-canvas px-2 py-2 text-sm focus:border-accent-dim focus:outline-none ${
+        active ? 'border-accent-dim text-ink' : 'border-line text-ink-muted'
       }`}
     >
       {children}
@@ -564,7 +564,7 @@ function PageButton({
         window.scrollTo({ top: 0 });
       }}
       aria-label={label}
-      className="rounded-md border border-line bg-panel px-2.5 py-1.5 text-ink hover:border-harvest-dim disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line"
+      className="rounded-md border border-line bg-panel px-2.5 py-1.5 text-ink hover:border-accent-dim disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line"
     >
       {children}
     </button>
