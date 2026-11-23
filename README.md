@@ -101,7 +101,18 @@ Silo server ──REST API──▶ Almanac server       │──live updates�
 3. Create a key called `Almanac` with only the **`admin:monitor:read`** and **`libraries:read`** scopes. Both are read-only. Without `libraries:read`, everything works but libraries show as numbers instead of names.
 4. Copy the key, which starts with `sa_`. Silo only shows it once.
 
-### 2. Run Almanac with Docker
+### 2. Install
+
+**The quick way**, on a Linux server (it installs Docker if needed, sets up HTTPS, and keeps your data on re-runs):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/daskaputtja/almanac/main/deploy/install.sh -o install-almanac.sh
+sudo bash install-almanac.sh
+```
+
+It asks for Almanac's address, your Silo address and the API key, then prints the setup code for step 3. Before running it, point a DNS **A record** for Almanac's address at the server.
+
+**Or by hand** with Docker Compose:
 
 ```yaml
 services:
