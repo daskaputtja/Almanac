@@ -95,13 +95,22 @@ services:
     environment:
       SILO_URL: https://silo.example.com
       SILO_API_KEY: sa_your_key_here
-      ALMANAC_USERNAME: admin
-      ALMANAC_PASSWORD: change-me
     volumes:
       - ./almanac-data:/data
 ```
 
-Then open `http://your-server:8191`.
+### 3. Create your account
+
+1. Find the setup code in Almanac's log:
+   ```bash
+   docker logs almanac
+   ```
+   Look for `You'll need this setup code: XXXX-XXXX-XXXX`. A new code is printed each time Almanac starts, until the first account exists.
+2. Open `http://your-server:8191`, enter the setup code, and choose a username and password (at least 12 characters).
+3. Scan the QR code with an authenticator app (Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden and so on), then type in the 6-digit code it shows.
+4. Save your 10 recovery codes somewhere safe. Each one signs you in once if you don't have your phone.
+
+From then on, signing in needs your password and a code from the app.
 
 The `/data` volume holds Almanac's database. Keep it, or Almanac will have to import your history again and will lose any plays Silo has since removed.
 
@@ -111,8 +120,10 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 |---|---|---|---|
 | `SILO_URL` | Yes | | Your Silo server's address, e.g. `https://silo.example.com` |
 | `SILO_API_KEY` | Yes | | The API key from step 1 |
-| `ALMANAC_USERNAME` | No | | Username for Almanac's login prompt |
-| `ALMANAC_PASSWORD` | No | | Password for Almanac's login prompt |
+| `TRUST_PROXY` | No | `false` | Set to `true` behind a reverse proxy, so Almanac sees visitors' real IP addresses and HTTPS |
+| `SECURE_COOKIES` | No | `auto` | `auto` marks the sign-in cookie HTTPS-only when the request came over HTTPS; or `always` / `never` |
+| `ALMANAC_USERNAME` | No | | Creates the first account on startup instead of using the setup page. You still set up 2FA at first sign-in |
+| `ALMANAC_PASSWORD` | No | | The password for that account |
 | `PORT` | No | `8191` | The port Almanac listens on |
 | `POLL_INTERVAL_SECONDS` | No | `5` | How often to ask Silo for activity |
 | `HISTORY_SYNC_SECONDS` | No | `60` | How often to fetch new plays from Silo |
@@ -121,7 +132,31 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | `SILO_MOCK` | No | `false` | Set to `true` to show made-up demo data instead of a real server |
 
 > [!IMPORTANT]
-> Almanac shows usernames and IP addresses. If it can be reached from the internet, set `ALMANAC_USERNAME` and `ALMANAC_PASSWORD`, and put it behind HTTPS (for example with your existing reverse proxy).
+> Almanac shows usernames and IP addresses. If it can be reached from the internet, put it behind HTTPS (for example your existing reverse proxy) and set `TRUST_PROXY=true`.
+
+## Security
+
+- **Sign-in needs two things:** a password and a 6-digit code from an authenticator app (TOTP, RFC 6238). Two-factor authentication can't be turned off.
+- **First-run protection:** creating the first account needs a setup code that is only printed in the server log, so someone who finds a fresh install can't claim it.
+- **Passwords** are hashed with scrypt. **Recovery codes** and **session tokens** are stored only as hashes, so a copy of the database can't be used to sign in.
+- **Each authenticator code works once.** Codes from up to 30 seconds either side are accepted, to allow for clock drift.
+- **Sessions** use an `HttpOnly`, `SameSite=Lax` cookie (also `Secure` over HTTPS). They end after 7 days unused or 30 days at most. You can see and sign out sessions in Settings.
+- **Failed attempts are limited:** 20 per IP address and 10 per username in 15 minutes. Five wrong codes on one sign-in sends you back to the password step.
+- **Requests from other websites are refused.** Every request that changes something needs a header other sites can't send, and a matching `Origin`.
+- **Every API route needs a session**, except `/api/health` for Docker's health check.
+- **Security headers:** a strict Content Security Policy, no framing, and `no-referrer`.
+
+### Locked out?
+
+Use the recovery tool inside the container:
+
+```bash
+docker exec -it almanac almanac-cli users                    # list accounts
+docker exec -it almanac almanac-cli reset-2fa <username>     # set up 2FA again at next sign-in
+docker exec -it almanac almanac-cli reset-password <username>
+```
+
+Both resets sign the account out everywhere. Outside Docker, use `npm run cli -- <command>`.
 
 ## Development
 
@@ -151,6 +186,8 @@ server/            The Almanac server (Hono on Node.js)
   stats/           Statistics calculated from the play history
   users/           Accounts combined with their play history
   library/         Copying Silo's catalog and the Libraries page's queries
+  auth/            Accounts, passwords, two-factor codes, sessions and sign-in routes
+  cli.ts           The almanac-cli recovery tool
   db/              Opening the SQLite database and running migrations
 shared/            Types shared by the server and the dashboard
 web/               The dashboard (React, Vite, Tailwind)
@@ -164,6 +201,7 @@ Database changes go in `server/db/database.ts` as a new numbered migration. Neve
 ## Tech stack
 
 - **Server:** TypeScript on Node.js with Hono
+- **Sign-in:** built-in scrypt and TOTP, using Node's crypto module, plus `qrcode` for the setup QR code
 - **Database:** SQLite, using Node's built-in `node:sqlite`
 - **Dashboard:** React, Vite and Tailwind CSS
 - **Tests:** Vitest

@@ -111,6 +111,43 @@ const MIGRATIONS: string[] = [
   /* 5: plays per library match episodes to shows by title */ `
     CREATE INDEX IF NOT EXISTS catalog_type_title ON catalog_items (type, title);
   `,
+  /* 6: Almanac's own accounts, two-factor authentication and sessions */ `
+    CREATE TABLE auth_users (
+      id                  INTEGER PRIMARY KEY,
+      username            TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      password_hash       TEXT NOT NULL,
+      totp_secret         TEXT,
+      totp_enabled        INTEGER NOT NULL DEFAULT 0,
+      totp_last_step      INTEGER,
+      created_at          TEXT NOT NULL,
+      password_changed_at TEXT NOT NULL
+    );
+
+    CREATE TABLE auth_recovery_codes (
+      user_id   INTEGER NOT NULL REFERENCES auth_users (id) ON DELETE CASCADE,
+      code_hash TEXT NOT NULL,
+      used_at   TEXT,
+      PRIMARY KEY (user_id, code_hash)
+    );
+
+    -- Tokens are stored hashed, so a copy of the database can't be used to sign in.
+    -- stage: 'totp' (password checked, waiting for a code), 'enroll' (password
+    -- checked, setting up 2FA) or 'full' (signed in).
+    CREATE TABLE auth_sessions (
+      token_hash     TEXT PRIMARY KEY,
+      public_id      TEXT NOT NULL UNIQUE,
+      user_id        INTEGER NOT NULL REFERENCES auth_users (id) ON DELETE CASCADE,
+      stage          TEXT NOT NULL,
+      pending_secret TEXT,
+      failed_codes   INTEGER NOT NULL DEFAULT 0,
+      created_at     TEXT NOT NULL,
+      last_seen_at   TEXT NOT NULL,
+      expires_at     TEXT NOT NULL,
+      ip             TEXT,
+      user_agent     TEXT
+    );
+    CREATE INDEX auth_sessions_user ON auth_sessions (user_id);
+  `,
 ];
 
 export type Database = DatabaseSync;

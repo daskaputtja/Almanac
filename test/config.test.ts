@@ -11,7 +11,9 @@ describe('loadConfig', () => {
     const config = loadConfig({ SILO_URL: 'https://silo.example.com', SILO_API_KEY: 'sa_test' });
     expect(config.port).toBe(8191);
     expect(config.pollIntervalMs).toBe(5000);
-    expect(config.auth).toBeNull();
+    expect(config.bootstrapUser).toBeNull();
+    expect(config.trustProxy).toBe(false);
+    expect(config.secureCookies).toBe('auto');
   });
 
   it('rejects a URL without a scheme', () => {
@@ -20,7 +22,7 @@ describe('loadConfig', () => {
 
   it('needs both login settings together', () => {
     expect(() => loadConfig({ SILO_MOCK: '1', ALMANAC_USERNAME: 'admin' })).toThrow(/ALMANAC_PASSWORD/);
-    expect(loadConfig({ SILO_MOCK: '1', ALMANAC_USERNAME: 'admin', ALMANAC_PASSWORD: 'pw' }).auth).toEqual({
+    expect(loadConfig({ SILO_MOCK: '1', ALMANAC_USERNAME: 'admin', ALMANAC_PASSWORD: 'pw' }).bootstrapUser).toEqual({
       username: 'admin',
       password: 'pw',
     });

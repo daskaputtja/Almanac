@@ -16,7 +16,9 @@ WORKDIR /app
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /data && chown node:node /data \
+ && printf '#!/bin/sh\nexec node --disable-warning=ExperimentalWarning /app/dist/server/server/cli.js "$@"\n' > /usr/local/bin/almanac-cli \
+ && chmod +x /usr/local/bin/almanac-cli
 VOLUME /data
 USER node
 EXPOSE 8191

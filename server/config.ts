@@ -10,7 +10,10 @@ export interface Config {
   historySyncIntervalMs: number;
   catalogSyncIntervalMs: number;
   databasePath: string;
-  auth: { username: string; password: string } | null;
+  /** Creates the first Almanac account on startup if there are none yet. */
+  bootstrapUser: { username: string; password: string } | null;
+  trustProxy: boolean;
+  secureCookies: 'auto' | 'always' | 'never';
   webRoot: string;
 }
 
@@ -49,6 +52,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     problems.push('Set both ALMANAC_USERNAME and ALMANAC_PASSWORD, or neither.');
   }
 
+  const secureCookies = (env.SECURE_COOKIES ?? 'auto').trim().toLowerCase();
+  if (!['auto', 'always', 'never'].includes(secureCookies)) problems.push('SECURE_COOKIES must be auto, always or never.');
+
   if (problems.length) {
     throw new Error(`Almanac configuration problems:\n  - ${problems.join('\n  - ')}`);
   }
@@ -64,7 +70,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     catalogSyncIntervalMs: catalogMinutes * 60_000,
     // Demo data gets its own database so it never mixes with real history.
     databasePath: join(env.DATA_DIR ?? 'data', mock ? 'almanac-demo.db' : 'almanac.db'),
-    auth: username ? { username, password } : null,
+    bootstrapUser: username ? { username, password } : null,
+    trustProxy: bool(env.TRUST_PROXY),
+    secureCookies: secureCookies as Config['secureCookies'],
     webRoot: env.ALMANAC_WEB_ROOT ?? 'dist/web',
   };
 }

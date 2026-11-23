@@ -1,10 +1,12 @@
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
-import { basicAuth } from 'hono/basic-auth';
+import { secureHeaders } from 'hono/secure-headers';
 import { streamSSE } from 'hono/streaming';
 import type { HistoryQuery, HistorySort } from '../shared/history.js';
 import type { PlayMethod } from '../shared/activity.js';
 import type { ActivityMonitor } from './activity/monitor.js';
+import { createAuth } from './auth/routes.js';
+import type { AuthService } from './auth/service.js';
 import type { Config } from './config.js';
 import type { StatsQuery } from '../shared/stats.js';
 import type { HistoryStore } from './history/store.js';
@@ -14,6 +16,7 @@ import type { StatsService } from './stats/stats.js';
 import type { UsersService } from './users/users.js';
 
 export interface AppServices {
+  auth: AuthService;
   monitor: ActivityMonitor;
   history: HistoryStore;
   historySync: HistorySync;
@@ -72,10 +75,31 @@ export function parseStatsQuery(params: Record<string, string | undefined>): Sta
 }
 
 export function createApp(
-  config: Pick<Config, 'auth' | 'webRoot'>,
-  { monitor, history, historySync, stats, users, library }: AppServices,
+  config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
+  { auth, monitor, history, historySync, stats, users, library }: AppServices,
 ) {
   const app = new Hono();
+
+  app.use(
+    '*',
+    secureHeaders({
+      contentSecurityPolicy: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // React sets style attributes (progress bars, chart colours).
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        // Posters come from Silo's image storage, which can be any HTTPS host.
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'none'"],
+        objectSrc: ["'none'"],
+      },
+      referrerPolicy: 'no-referrer',
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
 
   // Health checks stay open so Docker can probe the container.
   app.get('/api/health', (c) => {
@@ -83,9 +107,11 @@ export function createApp(
     return c.json({ status: error ? 'degraded' : 'ok', fetchedAt, error });
   });
 
-  if (config.auth) {
-    app.use('*', basicAuth({ ...config.auth, realm: 'Almanac' }));
-  }
+  // Sign-in. Everything under /api below this needs a signed-in session.
+  const { routes: authRoutes, csrf, requireSession } = createAuth(auth, config);
+  app.use('/api/*', csrf);
+  app.route('/api/auth', authRoutes);
+  app.use('/api/*', requireSession);
 
   app.get('/api/activity', (c) => c.json(monitor.current()));
 

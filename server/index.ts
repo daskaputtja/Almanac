@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { ActivityMonitor } from './activity/monitor.js';
 import { createApp } from './app.js';
+import { AuthService } from './auth/service.js';
 import { loadConfig } from './config.js';
 import { type Database, openDatabase } from './db/database.js';
 import { HistoryStore } from './history/store.js';
@@ -54,13 +55,27 @@ catalogSync.start();
 const stats = new StatsService(db);
 const users = new UsersService(db);
 const library = new LibraryService(db, catalogSync);
-const app = createApp(config, { monitor, history, historySync, stats, users, library });
+
+const auth = new AuthService(db);
+if (!auth.hasUsers() && config.bootstrapUser) {
+  try {
+    await auth.createUser(config.bootstrapUser.username, config.bootstrapUser.password);
+    console.log(`Created the Almanac account "${config.bootstrapUser.username}". Set up two-factor authentication when you first sign in.`);
+  } catch (err) {
+    console.error(`Could not create the account from ALMANAC_USERNAME/ALMANAC_PASSWORD: ${err instanceof Error ? err.message : err}`);
+  }
+}
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
   console.log(`Database: ${config.databasePath}`);
-  if (!config.auth) {
-    console.log('Warning: no ALMANAC_USERNAME/ALMANAC_PASSWORD set, so the dashboard is open to anyone who can reach it.');
+  if (!auth.hasUsers()) {
+    console.log('');
+    console.log('  No account yet. Open Almanac in your browser to create one.');
+    console.log(`  You'll need this setup code: ${auth.setupCode}`);
+    console.log('');
   }
 });
 
