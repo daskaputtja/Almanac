@@ -140,6 +140,7 @@ export interface HistoryPageQuery {
 export interface SiloUser {
   id: string;
   username: string;
+  email?: string | null;
   role?: string;
   enabled?: boolean;
   is_owner?: boolean;

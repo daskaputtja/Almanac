@@ -102,9 +102,9 @@ export class CatalogSync {
     const now = new Date().toISOString();
     transaction(this.db, () => {
       const upsert = this.db.prepare(
-        `INSERT INTO silo_users (id, username, role, enabled, is_owner, created_at, last_active_at, synced_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (id) DO UPDATE SET username = excluded.username, role = excluded.role, enabled = excluded.enabled,
+        `INSERT INTO silo_users (id, username, role, enabled, is_owner, created_at, last_active_at, synced_at, email)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET username = excluded.username, email = excluded.email, role = excluded.role, enabled = excluded.enabled,
            is_owner = excluded.is_owner, created_at = excluded.created_at, last_active_at = excluded.last_active_at,
            synced_at = excluded.synced_at`,
       );
@@ -257,6 +257,7 @@ function userRow(u: SiloUser, now: string) {
     u.created_at ?? null,
     u.last_active_at ?? null,
     now,
+    u.email?.trim() || null,
   ] as const;
 }
 

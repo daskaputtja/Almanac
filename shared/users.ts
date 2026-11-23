@@ -1,6 +1,8 @@
 export interface UserSummary {
   id: string;
   name: string;
+  /** The account's email in Silo, to help recognise people. Null if unknown. */
+  email: string | null;
   /** From Silo; null when the account no longer exists there. */
   role: string | null;
   enabled: boolean | null;

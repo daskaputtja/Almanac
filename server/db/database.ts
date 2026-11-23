@@ -297,6 +297,9 @@ const MIGRATIONS: string[] = [
     );
     CREATE INDEX notify_items_status ON notify_items (status, detected_at);
   `,
+  /* 15: account email addresses, to help mods recognise people */ `
+    ALTER TABLE silo_users ADD COLUMN email TEXT;
+  `,
 ];
 
 export type Database = DatabaseSync;

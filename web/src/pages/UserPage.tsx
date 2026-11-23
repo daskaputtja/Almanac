@@ -101,6 +101,13 @@ export function UserPage({ userId }: { userId: string }) {
                 {new Date().getFullYear()} recap
               </Link>
             </div>
+            {user.email && (
+              <p className="mt-0.5 text-sm text-ink-muted">
+                <a href={`mailto:${user.email}`} className="hover:text-ink hover:underline">
+                  {user.email}
+                </a>
+              </p>
+            )}
             <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-muted">
               {user.createdAt && <Fact label="Member since" value={new Date(user.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })} />}
               {user.firstPlayedAt && <Fact label="First play" value={new Date(user.firstPlayedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })} />}

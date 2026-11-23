@@ -66,6 +66,7 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
           <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="font-semibold text-accent hover:underline">
             {flag.username}
           </Link>{' '}
+          {flag.email && <span className="text-ink-muted">{flag.email} </span>}
           <UserTags userId={flag.userId} />
         </p>
       )}

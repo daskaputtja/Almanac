@@ -235,15 +235,17 @@ export class ModerationService {
         `SELECT f.*, COALESCE(
            (SELECT username FROM silo_users u WHERE u.id = f.user_id),
            (SELECT username FROM plays p WHERE p.user_id = f.user_id AND p.username <> '' ORDER BY p.ended_at DESC LIMIT 1)
-         ) AS username
+         ) AS username,
+         (SELECT email FROM silo_users u WHERE u.id = f.user_id) AS email
          FROM moderation_flags f ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`,
       )
-      .all(...params) as unknown as (FlagRow & { username: string | null })[];
+      .all(...params) as unknown as (FlagRow & { username: string | null; email: string | null })[];
 
     const flags = rows.map((r): ModerationFlag => ({
       id: `${r.user_id}:${r.kind}`,
       userId: r.user_id,
       username: r.username ?? `Deleted user ${r.user_id}`,
+      email: r.email,
       kind: r.kind as FlagKind,
       group: FLAG_GROUP[r.kind as FlagKind] ?? 'sharing',
       severity: r.severity,

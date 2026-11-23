@@ -11,6 +11,7 @@ const COUNTED = `(watched_seconds IS NULL OR watched_seconds >= ${MIN_WATCHED_SE
 interface SiloUserRow {
   id: string;
   username: string;
+  email: string | null;
   role: string | null;
   enabled: number | null;
   is_owner: number;
@@ -145,6 +146,7 @@ function summarize(
   return {
     id,
     name: silo?.username || last?.username || `Deleted user ${id}`,
+    email: silo?.email ?? null,
     role: silo?.role ?? null,
     enabled: silo?.enabled == null ? null : silo.enabled === 1,
     isOwner: silo?.is_owner === 1,

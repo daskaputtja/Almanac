@@ -49,6 +49,7 @@ export interface ModerationFlag {
   id: string;
   userId: string;
   username: string;
+  email: string | null;
   kind: FlagKind;
   group: FlagGroup;
   severity: Severity;

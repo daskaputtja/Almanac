@@ -68,7 +68,7 @@ export function UsersPage() {
     if (!users) return [];
     const q = (params.get('search') ?? '').toLowerCase();
     const list = users.filter((u) => {
-      if (q && !u.name.toLowerCase().includes(q)) return false;
+      if (q && !u.name.toLowerCase().includes(q) && !(u.email ?? '').toLowerCase().includes(q)) return false;
       if (show === 'active') return u.plays30Days > 0;
       if (show === 'inactive') return u.plays30Days === 0 && u.inSilo && u.enabled !== false;
       if (show === 'disabled') return !u.inSilo || u.enabled === false;
@@ -98,7 +98,7 @@ export function UsersPage() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search users"
+          placeholder="Search by name or email"
           aria-label="Search users"
           className="w-full rounded-lg border border-line bg-panel px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none sm:w-72"
         />
@@ -148,13 +148,16 @@ export function UsersPage() {
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2.5">
                       <Avatar name={u.name} size="sm" />
-                      <Link
-                        to={`/users/${encodeURIComponent(u.id)}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-medium text-accent hover:underline"
-                      >
-                        {u.name}
-                      </Link>
+                      <div className="min-w-0">
+                        <Link
+                          to={`/users/${encodeURIComponent(u.id)}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="font-medium text-accent hover:underline"
+                        >
+                          {u.name}
+                        </Link>
+                        {u.email && <div className="max-w-[16rem] truncate text-xs text-ink-faint" title={u.email}>{u.email}</div>}
+                      </div>
                       <RoleBadges role={u.role} isOwner={u.isOwner} enabled={u.enabled} inSilo={u.inSilo} />
                       <UserTags userId={u.id} />
                     </div>

@@ -266,6 +266,7 @@ export class MockCatalogSource implements CatalogSource {
     return names.map((username, i) => ({
       id: String(100 + i),
       username,
+      email: `${username}@example.com`,
       role: i === 0 ? 'admin' : 'user',
       enabled: username !== 'quill',
       is_owner: i === 0,

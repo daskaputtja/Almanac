@@ -138,11 +138,12 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
     let cursor: string | undefined;
     for (let page = 0; page < 500; page++) {
       const result = await this.get<SiloCollection<SiloUser>>('/api/v2/admin/users', { limit: PAGE_SIZE, cursor });
-      // Keep only what Almanac needs; Silo also returns emails and policies.
+      // Keep only what Almanac needs (Silo also returns permissions and policies).
       for (const u of result.items) {
         users.push({
           id: u.id,
           username: u.username,
+          email: u.email ?? null,
           role: u.role,
           enabled: u.enabled,
           is_owner: u.is_owner,

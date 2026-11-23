@@ -45,8 +45,8 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - **Viewer map:** which countries people watch from, and (admins only) which cities. Looked up on your own server with a free copy of DB-IP's database, so no addresses are sent anywhere
 
 ### Users ✅
-- Every account, combining Silo's details (role, enabled, member since, last active) with plays, watch time, last watched, top platform and direct-play share
-- Search, sort, and filter by recent activity or disabled accounts
+- Every account, with its email to make people easy to recognise, combining Silo's details (role, enabled, member since, last active) with plays, watch time, last watched, top platform and direct-play share
+- Search by name or email, sort, and filter by recent activity or disabled accounts
 - A page for each user: what they're watching now, their charts and top titles, recent plays, and the players, IP addresses and profiles they use
 
 ### Libraries ✅
