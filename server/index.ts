@@ -133,6 +133,9 @@ accounts.start();
 // How reliably streams play, with an optional alert to a staff Discord channel.
 const staff = new StaffAlerts(db);
 const reliability = new ReliabilityService(db, serverSource, staff);
+moderation.onFlagEvents((events) => {
+  staff.flagAlerts(events).catch((err) => console.log(`Flag alert not sent: ${err instanceof Error ? err.message : String(err)}`));
+});
 reliability.start();
 
 const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff });

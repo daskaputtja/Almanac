@@ -44,10 +44,21 @@ export interface ReliabilityResponse {
   methods: ReliabilityGroup[];
 }
 
+/** Which new flags are posted to the staff channel: none, or this severity and above. */
+export type FlagAlertLevel = 'off' | 'high' | 'medium' | 'low';
+
+export const FLAG_ALERT_LEVELS: { value: FlagAlertLevel; label: string }[] = [
+  { value: 'high', label: 'Serious flags' },
+  { value: 'medium', label: 'Worth a look and serious' },
+  { value: 'low', label: 'Every flag, even minor ones' },
+  { value: 'off', label: 'No flags' },
+];
+
 export interface StaffAlertsSettings {
   /** The staff webhook with its secret hidden, or null if none is set. */
   webhookHint: string | null;
   reliability: boolean;
+  flagLevel: FlagAlertLevel;
   lastAlertAt: string | null;
   alerting: boolean;
 }

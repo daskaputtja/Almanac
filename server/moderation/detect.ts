@@ -11,6 +11,12 @@ export const THRESHOLDS = DEFAULT_THRESHOLDS;
 const CONTINUOUS_GAP_MS = 10 * 60_000;
 /** For back-to-back: the next title started within this long of the last ending. */
 const BACK_TO_BACK_GAP_MS = 3 * 60_000;
+/** Impossible travel: at least this far apart… */
+const TRAVEL_MIN_KM = 500;
+/** …and faster than a plane would need to go… */
+const TRAVEL_MAX_KMH = 900;
+/** …looking back no further than this for the previous play. */
+const TRAVEL_LOOKBACK_MS = 12 * 3_600_000;
 /** A play that timed out stops counting as "playing" this long before its recorded end. */
 const STALE_SESSION_MS = 10 * 60_000;
 /** For back-to-back: a play paused for less than this counts as "no pauses". */
@@ -36,7 +42,7 @@ export interface PlayForDetection {
 }
 
 /** Where an address is, from the local geolocation database. */
-export type Locate = (ip: string) => { country: string; city: string | null } | null;
+export type Locate = (ip: string) => { country: string; city: string | null; lat?: number | null; lon?: number | null } | null;
 
 /** Offline downloads and signed-in devices, from Silo's admin API. */
 export interface AccountExtras {
@@ -183,6 +189,60 @@ export function detectFlags(
         `Networks: ${(liveNow && liveNetworks.size >= worst.count ? [...liveNetworks] : worst.networks).join(', ')}`,
         ...(towns.length ? [`Places: ${towns.join('; ')}`] : []),
       ],
+    });
+  }
+
+  // --- Impossible travel -------------------------------------------------------
+  // Two different devices playing far apart, closer together in time than anyone
+  // could travel. One device jumping about is a VPN or a mobile network's
+  // address being placed in the wrong city, so that doesn't count.
+  type Trip = { at: number; gapMs: number; km: number; from: string; to: string; fromTown: string; toTown: string };
+  const trips: Trip[] = [];
+  const located = spans.map((s) => {
+    const l = s.play.ip ? locate(s.play.ip) : null;
+    return l && l.country !== 'LAN' && l.lat != null && l.lon != null ? { s, l } : null;
+  });
+  for (let i = 0; i < spans.length; i++) {
+    const b = located[i];
+    if (!b) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      const a = located[j];
+      if (!a) continue;
+      const gapMs = Math.max(0, b.s.start - a.s.liveUntil);
+      if (gapMs > TRAVEL_LOOKBACK_MS) break;
+      if (a.s.network === b.s.network) continue;
+      const km = distanceKm(a.l.lat!, a.l.lon!, b.l.lat!, b.l.lon!);
+      if (km < TRAVEL_MIN_KM || km / Math.max(gapMs / 3_600_000, 1 / 60) <= TRAVEL_MAX_KMH) continue;
+      const sameDevice = (a.s.play.deviceId ?? a.s.play.ip) === (b.s.play.deviceId ?? b.s.play.ip);
+      if (!sameDevice) {
+        const town = (l: NonNullable<ReturnType<Locate>>) => [l.city, countryName(l.country)].filter(Boolean).join(', ');
+        trips.push({ at: b.s.start, gapMs, km, from: countryName(a.l.country), to: countryName(b.l.country), fromTown: town(a.l), toTown: town(b.l) });
+      }
+      break;
+    }
+  }
+  const travelDays = new Set(trips.map((t) => new Date(t.at).toISOString().slice(0, 10))).size;
+  const travelSeverity = severityFor(travelDays, T.travelDays);
+  if (travelSeverity) {
+    const latest = trips[trips.length - 1]!;
+    const atOnce = trips.filter((t) => t.gapMs === 0).length;
+    const describe = (t: Trip, from: string, to: string) => {
+      const km = `${Math.round(t.km).toLocaleString('en')} km apart`;
+      if (from === to) return t.gapMs === 0 ? `two places in ${from} at the same time, ${km}` : `two places in ${from} ${formatGap(t.gapMs)} apart, ${km}`;
+      return t.gapMs === 0 ? `${from} and ${to} at the same time, ${km}` : `${from}, then ${to} ${formatGap(t.gapMs)} later, ${km}`;
+    };
+    flags.push({
+      kind: 'impossible_travel',
+      severity: travelSeverity,
+      value: travelDays,
+      headline: `Played in places too far apart to travel between, on ${plural(travelDays, 'day')} this week`,
+      details: [
+        `Most recently ${when(latest.at)}: ${describe(latest, latest.from, latest.to)}, on different devices.`,
+        atOnce > trips.length / 2
+          ? `${atOnce} of ${plural(trips.length, 'time')} were at the same moment: usually two households on one account.`
+          : `Seen ${plural(trips.length, 'time')}. A VPN can cause this now and then; day after day it usually means two households.`,
+      ],
+      adminDetails: [`Most recent: ${describe(latest, latest.fromTown, latest.toTown)}.`],
     });
   }
 
@@ -377,4 +437,15 @@ function countryName(code: string): string {
   } catch {
     return code;
   }
+}
+
+function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const rad = Math.PI / 180;
+  const h = Math.sin(((lat2 - lat1) * rad) / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(((lon2 - lon1) * rad) / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+function formatGap(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }

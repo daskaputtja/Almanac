@@ -16,7 +16,9 @@ export type FlagKind =
   /** A lot of offline downloads in a week. */
   | 'heavy_downloads'
   /** Many devices registered to the account and in use. */
-  | 'many_registered_devices';
+  | 'many_registered_devices'
+  /** Played in two places too far apart to travel between in the time. */
+  | 'impossible_travel';
 
 export type FlagGroup = 'sharing' | 'nonstop' | 'ripping';
 
@@ -31,6 +33,7 @@ export const FLAG_GROUP: Record<FlagKind, FlagGroup> = {
   back_to_back: 'ripping',
   heavy_downloads: 'ripping',
   many_registered_devices: 'sharing',
+  impossible_travel: 'sharing',
 };
 
 export const GROUP_LABELS: Record<FlagGroup, { title: string; meaning: string }> = {
@@ -120,6 +123,7 @@ export type ThresholdKey =
   | 'dailyHours'
   | 'backToBackHours'
   | 'devicesRegistered'
+  | 'travelDays'
   | 'downloadsInWindow'
   | 'downloadGbInWindow';
 
@@ -138,6 +142,7 @@ export const DEFAULT_THRESHOLDS: FlagThresholds = {
   dailyHours: { enabled: true, medium: 12, high: 18 },
   backToBackHours: { enabled: true, low: 8, medium: 12 },
   devicesRegistered: { enabled: true, low: 15, medium: 25 },
+  travelDays: { enabled: true, low: 4, medium: 6 },
   downloadsInWindow: { enabled: true, medium: 40, high: 80 },
   downloadGbInWindow: { enabled: true, medium: 200, high: 400 },
 };
@@ -218,6 +223,16 @@ export const THRESHOLD_INFO: Record<ThresholdKey, ThresholdInfo> = {
     min: 2,
     max: 500,
   },
+  travelDays: {
+    group: 'sharing',
+    label: 'Days with impossible travel',
+    description:
+      'Days in the week when two different devices played over 500 km apart, closer together in time than anyone could travel (including at the same moment). A VPN can cause it once in a while; it happening day after day usually means two households.',
+    unit: 'days',
+    levels: ['low', 'medium'],
+    min: 1,
+    max: 7,
+  },
   downloadsInWindow: {
     group: 'ripping',
     label: 'Offline downloads in a week',
@@ -288,6 +303,7 @@ export const THRESHOLD_KIND: Record<ThresholdKey, FlagKind> = {
   dailyHours: 'heavy_daily',
   backToBackHours: 'back_to_back',
   devicesRegistered: 'many_registered_devices',
+  travelDays: 'impossible_travel',
   downloadsInWindow: 'heavy_downloads',
   downloadGbInWindow: 'heavy_downloads',
 };

@@ -63,11 +63,24 @@ export interface Actor {
 
 const THRESHOLDS_KEY = 'flagThresholds';
 
+/** A flag worth telling staff about. Details are the mod-safe ones (no addresses). */
+export interface FlagEvent {
+  reason: 'new' | 'worse' | 'reopened';
+  userId: string;
+  username: string;
+  email: string | null;
+  kind: FlagKind;
+  severity: Severity;
+  headline: string;
+  details: string[];
+}
+
 export class ModerationService {
   private checkedAt: string | null = null;
   /** What was playing at the last check, reused for previews and re-checks after a settings change. */
   private lastLive = new Map<string, LiveStreamForDetection[]>();
   private readonly settings: SettingsStore;
+  private listener: ((events: FlagEvent[]) => void) | null = null;
 
   constructor(private readonly db: Database) {
     this.settings = new SettingsStore(db);
@@ -89,10 +102,16 @@ export class ModerationService {
     };
   }
 
+  /** Be told when flags appear, get worse or reopen (for staff alerts). */
+  onFlagEvents(listener: (events: FlagEvent[]) => void): void {
+    this.listener = listener;
+  }
+
   /** Save new thresholds (already validated) and re-check every account with them. */
   setThresholds(thresholds: FlagThresholds, by: string): void {
     this.settings.set(THRESHOLDS_KEY, thresholds, by);
-    this.refresh(this.lastLive);
+    // Flags that appear because an admin changed the levels aren't news.
+    this.refresh(this.lastLive, Date.now(), { quiet: true });
   }
 
   /** How many accounts the current and the proposed thresholds flag, without saving anything. */
@@ -111,10 +130,17 @@ export class ModerationService {
    * Run every check over the last week of plays (and what's playing now),
    * then update the stored flags. Takes well under a second on a busy server.
    */
-  refresh(liveByUser: Map<string, LiveStreamForDetection[]> = new Map(), now = Date.now()): void {
+  refresh(liveByUser: Map<string, LiveStreamForDetection[]> = new Map(), now = Date.now(), options: { quiet?: boolean } = {}): void {
     this.lastLive = liveByUser;
     const detected = this.detectAll(liveByUser, now, this.thresholds());
-    this.store(detected, now);
+    const events = this.store(detected, now);
+    if (events.length && this.listener && !options.quiet) {
+      try {
+        this.listener(events);
+      } catch {
+        // Alerts must never stop the checks.
+      }
+    }
   }
 
   private detectAll(liveByUser: Map<string, LiveStreamForDetection[]>, now: number, thresholds: FlagThresholds): Map<string, DetectedFlag[]> {
@@ -186,9 +212,11 @@ export class ModerationService {
     const places = new Map(
       (
         this.db
-          .prepare('SELECT ip, country_code, city FROM ip_locations WHERE country_code IS NOT NULL AND ip IN (SELECT DISTINCT client_ip FROM plays WHERE started_at >= ?)')
-          .all(since) as { ip: string; country_code: string; city: string | null }[]
-      ).map((r) => [r.ip, { country: r.country_code, city: r.city }]),
+          .prepare(
+            'SELECT ip, country_code, city, latitude, longitude FROM ip_locations WHERE country_code IS NOT NULL AND ip IN (SELECT DISTINCT client_ip FROM plays WHERE started_at >= ?)',
+          )
+          .all(since) as { ip: string; country_code: string; city: string | null; latitude: number | null; longitude: number | null }[]
+      ).map((r) => [r.ip, { country: r.country_code, city: r.city, lat: r.latitude, lon: r.longitude }]),
     );
     const locate: Locate = (ip) => places.get(ip) ?? null;
 
@@ -200,8 +228,9 @@ export class ModerationService {
     return detected;
   }
 
-  private store(detected: Map<string, DetectedFlag[]>, now: number): void {
+  private store(detected: Map<string, DetectedFlag[]>, now: number): FlagEvent[] {
     const nowIso = new Date(now).toISOString();
+    const events: Omit<FlagEvent, 'username' | 'email'>[] = [];
     transaction(this.db, () => {
       const existing = new Map(
         (this.db.prepare('SELECT * FROM moderation_flags').all() as unknown as FlagRow[]).map((r) => [`${r.user_id}:${r.kind}`, r]),
@@ -225,13 +254,21 @@ export class ModerationService {
           seen.add(key);
           const before = existing.get(key);
           upsert.run(userId, f.kind, f.severity, f.value, f.headline, JSON.stringify(f.details), JSON.stringify(f.adminDetails), nowIso, nowIso);
+          const event = { userId, kind: f.kind, severity: f.severity, headline: f.headline, details: f.details };
           // A reviewed flag comes back if it got clearly worse, or came back after stopping.
           if (before?.status === 'reviewed') {
             const worse =
               SEVERITY_RANK[f.severity] > SEVERITY_RANK[before.severity] ||
               f.value >= (before.reviewed_value ?? before.value) * REOPEN_GROWTH ||
               before.active === 0;
-            if (worse) reopen.run(userId, f.kind);
+            if (worse) {
+              reopen.run(userId, f.kind);
+              events.push({ ...event, reason: 'reopened' });
+            }
+          } else if (!before || before.active === 0) {
+            events.push({ ...event, reason: 'new' });
+          } else if (SEVERITY_RANK[f.severity] > SEVERITY_RANK[before.severity]) {
+            events.push({ ...event, reason: 'worse' });
           }
         }
       }
@@ -242,6 +279,15 @@ export class ModerationService {
       }
     });
     this.checkedAt = nowIso;
+    if (!events.length) return [];
+    const who = this.db.prepare(
+      `SELECT COALESCE((SELECT username FROM silo_users WHERE id = ?), (SELECT username FROM plays WHERE user_id = ? ORDER BY ended_at DESC LIMIT 1)) AS username,
+              (SELECT email FROM silo_users WHERE id = ?) AS email`,
+    );
+    return events.map((e) => {
+      const row = who.get(e.userId, e.userId, e.userId) as { username: string | null; email: string | null };
+      return { ...e, username: row.username ?? `Deleted user ${e.userId}`, email: row.email };
+    });
   }
 
   flags(options: { status?: 'open' | 'reviewed' | 'all'; userId?: string; includeAdminDetails: boolean; includeInactive?: boolean }): FlagsResponse {

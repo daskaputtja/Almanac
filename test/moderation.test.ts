@@ -95,6 +95,32 @@ describe('detectFlags', () => {
     expect(kinds(detectFlags(browsers, 7))).not.toContain('many_devices');
   });
 
+  it('spots impossible travel between devices, day after day, but not one device jumping about', () => {
+    const places: Record<string, { country: string; city: string; lat: number; lon: number }> = {
+      '203.0.113.10': { country: 'CA', city: 'Montreal', lat: 45.5, lon: -73.6 },
+      '198.51.100.4': { country: 'IE', city: 'Cork', lat: 51.9, lon: -8.5 },
+    };
+    const locate = (ip: string) => places[ip] ?? null;
+    // Each evening for five days: a TV in Montreal, then a phone in Cork an hour later.
+    const twoHomes = Array.from({ length: 5 }, (_, d) => [
+      play(d * 24 + 18, 1, { deviceId: 'tv' }),
+      play(d * 24 + 20, 1, { deviceId: 'phone', ip: '198.51.100.4' }),
+    ]).flat();
+    const flag = detectFlags(twoHomes, 7, [], undefined, undefined, locate).find((f) => f.kind === 'impossible_travel')!;
+    expect(flag.severity).toBe('low');
+    expect(flag.headline).toBe('Played in places too far apart to travel between, on 5 days this week');
+    expect(flag.details[0]).toContain('Canada, then Ireland 1 h 0 min later');
+    expect(flag.details.join(' ')).not.toContain('Montreal'); // towns are for admins
+    expect(flag.adminDetails[0]).toContain('Montreal, Canada, then Cork, Ireland');
+
+    // The same, but it's one device (a VPN switching countries): not flagged.
+    const vpn = twoHomes.map((p) => ({ ...p, deviceId: 'phone' }));
+    expect(kinds(detectFlags(vpn, 7, [], undefined, undefined, locate))).not.toContain('impossible_travel');
+    // Plenty of time to fly between them: not flagged.
+    const flights = Array.from({ length: 5 }, (_, d) => [play(d * 48, 1, { deviceId: 'tv' }), play(d * 48 + 12, 1, { deviceId: 'phone', ip: '198.51.100.4' })]).flat();
+    expect(kinds(detectFlags(flights, 7, [], undefined, undefined, locate))).not.toContain('impossible_travel');
+  });
+
   it('counts live streams too', () => {
     const live = [{ ip: '203.0.113.1', player: 'A' }, { ip: '198.51.100.1', player: 'B' }, { ip: '192.0.2.1', player: 'C' }];
     const flags = detectFlags([], 7, live);

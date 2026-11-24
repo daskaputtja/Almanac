@@ -370,6 +370,9 @@ export function createApp(
         {
           webhookUrl: body.webhookUrl === null ? null : typeof body.webhookUrl === 'string' ? body.webhookUrl : undefined,
           reliability: typeof body.reliability === 'boolean' ? body.reliability : undefined,
+          flagLevel: typeof body.flagLevel === 'string' ? (body.flagLevel as 'off' | 'high' | 'medium' | 'low') : undefined,
+          // Remember Almanac's own address for links in posts.
+          baseUrl: c.req.header('origin') ?? null,
         },
         c.get('session').user.username,
       ),

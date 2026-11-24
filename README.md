@@ -57,7 +57,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 
 ### Moderation ✅
 - **Account flags**, checked every 5 minutes over the last 7 days:
-  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, or 15 or more devices signed in to the account and used in the last 30 days
+  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, 15 or more devices signed in to the account and used in the last 30 days, or *impossible travel* on 4 or more days in a week (two different devices playing over 500 km apart, closer together in time than anyone could travel)
   - *Non-stop playback* (restreaming, or a TV left on): 24 hours or more without a break, or 12 or more hours a day on average
   - *Possible ripping:* 40 or more offline downloads (or 200 GB or more) in a week; or 8 or more hours of titles watched to the end back to back with no pauses (never more than "worth a look" on its own, since autoplay with the TV left on looks the same). Titles skipped through to the end don't count
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
@@ -80,7 +80,7 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - **Load:** streams and bandwidth over the last day, week, month, 3 months or year, with peaks, and a heatmap of a typical week so you can plan maintenance in the quiet hours
 - **Nodes:** each Silo node with its status, version, streams and bandwidth
 - **Transcode doctor:** why streams are being converted, which players and files cause it most, and suggestions for fixing it
-- **Reliability:** how many streams drop (the player stopped answering mid-stream) or stop within 10 seconds, compared with what's usual, by player and by playback method, alongside Silo's count of streams watched to the end. Admins can have a staff Discord channel alerted when drops jump
+- **Reliability:** how many streams drop (the player stopped answering mid-stream) or stop within 10 seconds, compared with what's usual, by player and by playback method, alongside Silo's count of streams watched to the end. Admins can have a staff Discord channel alerted when drops jump, and when new account flags appear (with the account's email and a link, never IP addresses)
 - **Downloads:** what people have downloaded in Silo's apps for offline viewing, the biggest downloaders, and what's on devices now. Almanac keeps its own record, so deleted downloads still count
 
 ### Discord notifications ✅ (admins)

@@ -7,6 +7,7 @@ import {
   QUALITY_FILTERS,
   type QualityFilter,
 } from '../../../shared/notifications';
+import { FLAG_ALERT_LEVELS } from '../../../shared/reliability';
 import { ApiError, api } from '../lib/api';
 import { formatFullDate, formatWhen } from '../lib/format';
 
@@ -513,8 +514,8 @@ function StaffCard({ staff, onChange }: { staff: NonNullable<NotificationsRespon
         </span>
       </div>
       <p className="mt-1 text-sm text-ink-muted">
-        A private channel for you and your mods. Almanac posts here when streams start dropping much more than usual for the time of day (checked every
-        15 minutes against the last two weeks), and again when things are back to normal.
+        A private channel for you and your mods. Almanac posts new account flags here (with the account’s email and a link to it, never IP addresses), and
+        tells you when streams start dropping much more than usual for the time of day, and when things are back to normal.
       </p>
       <form
         className="mt-4 flex flex-wrap items-start gap-2"
@@ -539,6 +540,21 @@ function StaffCard({ staff, onChange }: { staff: NonNullable<NotificationsRespon
       {problem && <p className="mt-1 text-xs text-red-200">{problem}</p>}
       {staff.webhookHint && (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            Post
+            <select
+              value={staff.flagLevel}
+              disabled={busy}
+              onChange={(e) => void act(() => api('/api/notifications/staff', { method: 'POST', body: { flagLevel: e.target.value } }), 'Saved.')}
+              className={`${input} py-1.5`}
+            >
+              {FLAG_ALERT_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"

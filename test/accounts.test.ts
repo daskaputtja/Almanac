@@ -160,3 +160,78 @@ describe('reliability', () => {
     expect(await reliability.checkAlert(NOW)).toBeNull();
   });
 });
+
+describe('flag alerts to the staff channel', () => {
+  const WEBHOOK = 'https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwxyz_0123';
+
+  function setup() {
+    const db = openDatabase(':memory:');
+    db.prepare("INSERT INTO silo_users (id, username, email, synced_at) VALUES ('7', 'pike', 'pike@example.com', ?)").run(ago(0));
+    const source = new FakeAccounts();
+    const accounts = new AccountsService(db, source, () => {});
+    const moderation = new ModerationService(db);
+    const events: import('../server/moderation/service.js').FlagEvent[][] = [];
+    moderation.onFlagEvents((e) => events.push(e));
+    const posts: { embeds: { title: string; description: string; author: { name: string }; url?: string }[] }[] = [];
+    const staff = new StaffAlerts(db, async (_url, init) => {
+      posts.push(JSON.parse(String(init?.body)));
+      return new Response('{}', { status: 200 });
+    }, () => {});
+    staff.update({ webhookUrl: WEBHOOK, baseUrl: 'https://almanac.example' }, 'admin');
+    return { db, source, accounts, moderation, events, posts, staff };
+  }
+
+  it('reports a flag once when it appears, and again when it gets more serious', async () => {
+    const { source, accounts, moderation, events } = setup();
+    source.downloads = Array.from({ length: 45 }, (_, i) => download(`d${i}`, '7', i));
+    await accounts.sync(NOW);
+    moderation.refresh(new Map(), NOW);
+    expect(events).toHaveLength(1);
+    expect(events[0]![0]).toMatchObject({ reason: 'new', kind: 'heavy_downloads', severity: 'medium', username: 'pike', email: 'pike@example.com' });
+
+    moderation.refresh(new Map(), NOW + 60_000);
+    expect(events).toHaveLength(1); // nothing new
+
+    source.downloads = Array.from({ length: 90 }, (_, i) => download(`d${i}`, '7', i / 2));
+    await accounts.sync(NOW + 120_000);
+    moderation.refresh(new Map(), NOW + 120_000);
+    expect(events[1]![0]).toMatchObject({ reason: 'worse', severity: 'high' });
+  });
+
+  it('stays quiet when an admin changes the thresholds', async () => {
+    const { source, accounts, moderation, events } = setup();
+    source.downloads = Array.from({ length: 10 }, (_, i) => download(`d${i}`, '7', i));
+    await accounts.sync(NOW);
+    moderation.refresh(new Map(), NOW);
+    const t = moderation.thresholds();
+    moderation.setThresholds({ ...t, downloadsInWindow: { enabled: true, medium: 5, high: 80 } }, 'admin');
+    expect(events).toHaveLength(0);
+  });
+
+  it('posts flags at the chosen level, with the email and a link but no addresses', async () => {
+    const { staff, posts } = setup();
+    const event = {
+      reason: 'new' as const,
+      userId: '7',
+      username: 'pike',
+      email: 'pike@example.com',
+      kind: 'concurrent_networks' as const,
+      severity: 'medium' as const,
+      headline: 'Streamed from 3 different networks at the same time',
+      details: ['Most recent peak: {{time:2026-11-24T10:00:00.000Z}} on Silo Android TV.'],
+    };
+    expect(await staff.flagAlerts([event])).toBe(1);
+    const embed = posts[0]!.embeds[0]!;
+    expect(embed.author.name).toBe('New flag · Possible account sharing');
+    expect(embed.url).toBe('https://almanac.example/users/7');
+    expect(embed.description).toContain('**pike** · pike@example.com');
+    expect(embed.description).toContain('<t:1795514400:f>');
+
+    staff.update({ flagLevel: 'high' }, 'admin');
+    expect(await staff.flagAlerts([event])).toBe(0);
+
+    staff.update({ flagLevel: 'low' }, 'admin');
+    await staff.flagAlerts(Array.from({ length: 8 }, (_, i) => ({ ...event, userId: String(i), username: `user${i}` })));
+    expect(posts.at(-1)!.embeds[0]!.title).toBe('8 new flags');
+  });
+});
