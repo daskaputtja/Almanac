@@ -1,3 +1,5 @@
+import type { StaffAlertsSettings } from './reliability.js';
+
 /** Which files a channel posts about, judged by the copy in the library it watches. */
 export type QualityFilter = 'any' | '4k' | 'hdr' | 'dolby_vision';
 
@@ -57,6 +59,8 @@ export interface NotificationsResponse {
   libraries: { id: string; name: string; type: string | null }[];
   keys: MetadataKeyStatus;
   log: NotifyLogEntry[];
+  /** Added by the route. */
+  staff?: StaffAlertsSettings;
 }
 
 /** Discord's webhook addresses, optionally posting into a thread or forum post. */

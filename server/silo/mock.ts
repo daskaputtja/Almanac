@@ -1,13 +1,16 @@
-import type { CatalogSource, HistorySource, ServerSource, SessionSource } from './client.js';
+import type { AccountSource, CatalogSource, HistorySource, ServerSource, SessionSource } from './client.js';
 import type {
   CatalogPageQuery,
   HistoryPageQuery,
   SiloCatalogItem,
   SiloCollection,
+  SiloDevice,
+  SiloDownload,
   SiloHistoryEntry,
   SiloLibrary,
   SiloNodeDetail,
   SiloNodeSummary,
+  SiloPlaybackActivity,
   SiloServerStatus,
   SiloSession,
   SiloSystemInfo,
@@ -331,6 +334,23 @@ export class MockServerSource implements ServerSource {
     return { resolution_seconds: resolution, points };
   }
 
+  async playbackActivity(hours: number): Promise<SiloPlaybackActivity> {
+    const started = Math.round(hours * 42);
+    const completed = Math.round(started * 0.56);
+    return {
+      hours,
+      reliability: {
+        sessions_started: started,
+        transcode_starts: Math.round(started * 0.08),
+        finalized_sessions: started - 3,
+        completed_sessions: completed,
+        completion_rate: completed / (started - 3),
+        unique_profiles: Math.min(420, Math.round(40 + hours * 4)),
+      },
+      profiles_active_24h: 120,
+    };
+  }
+
   async nodeDetails(): Promise<SiloNodeDetail[]> {
     return Array.from({ length: 4 }, (_, i) => ({
       id: String(i + 1),
@@ -346,5 +366,75 @@ export class MockServerSource implements ServerSource {
       last_health_check: new Date().toISOString(),
       resources: { system: { cpu_pct: [12, 7, 2, 48][i], cores: 8, load1: [1.2, 0.6, 0.1, 3.9][i], mem_used_mb: [9_000, 6_200, 3_100, 14_000][i], mem_total_mb: 32_000 } },
     }));
+  }
+}
+
+/** Made-up offline downloads and registered devices for demo mode. */
+export class MockAccountSource implements AccountSource {
+  constructor(private readonly now = Date.now()) {}
+
+  async listDownloads(): Promise<SiloDownload[]> {
+    const random = seededRandom(11);
+    const titles = ['Glass Lanterns', 'The Salt Road', 'Kettle Hill', 'Northbound', 'Copper Sky', 'The Night Ferry', 'Thimble', 'Seven Bridges'];
+    const downloads: SiloDownload[] = [];
+    // One busy downloader, a couple of occasional ones.
+    const plan: [string, string, number][] = [
+      ['101', 'pike', 46],
+      ['102', 'wren', 6],
+      ['104', 'atlas', 2],
+    ];
+    let n = 0;
+    for (const [userId, username, count] of plan) {
+      for (let i = 0; i < count; i++) {
+        const isEpisode = i % 3 !== 0;
+        const created = new Date(this.now - (userId === '101' ? random() * 5 : random() * 25) * 86_400_000).toISOString();
+        downloads.push({
+          id: `dl-${++n}`,
+          user_id: userId,
+          username,
+          profile_id: `${userId}-main`,
+          device_id: `${userId}-phone`,
+          device_name: userId === '101' ? 'Pixel 9' : 'iPad',
+          content_id: isEpisode ? 'mock-series-1' : `mock-movie-${(i % 8) + 1}`,
+          title: isEpisode ? 'Weather Station' : titles[i % titles.length],
+          media_type: isEpisode ? 'series' : 'movie',
+          episode: isEpisode ? { season_number: 1 + Math.floor(i / 10), episode_number: (i % 10) + 1, title: `Episode ${(i % 10) + 1}` } : null,
+          status: random() < 0.85 ? 'completed' : 'ready',
+          quality: 'original',
+          file_size: Math.round((isEpisode ? 1.2 : 6) * 1e9 * (0.5 + random())),
+          created_at: created,
+          completed_at: created,
+          created_client_ip: `203.0.113.${10 + Number(userId) - 100}`,
+        });
+      }
+    }
+    return downloads;
+  }
+
+  async listDevices(): Promise<SiloDevice[]> {
+    const devices: SiloDevice[] = [];
+    const names: [string, string][] = [
+      ['Living Room TV', 'android-tv'],
+      ['iPhone', 'iOS'],
+      ['Chrome on Windows', 'Windows Web'],
+      ['Apple TV', 'tvOS'],
+    ];
+    for (let u = 0; u < 6; u++) {
+      // Account 103 is used on far more devices than anyone else.
+      const count = u === 3 ? 17 : 2 + (u % 3);
+      for (let d = 0; d < count; d++) {
+        const [name, platform] = names[d % names.length]!;
+        devices.push({
+          user_id: String(100 + u),
+          device_id: `${100 + u}-device-${d}`,
+          device_name: d < names.length ? name : `${name} ${Math.floor(d / names.length) + 1}`,
+          device_platform: platform,
+          profile_count: 1 + (d % 2),
+          profiles: [{ profile_id: `${100 + u}-main`, profile_name: 'Main' }],
+          last_updated: new Date(this.now - d * 1.5 * 86_400_000).toISOString(),
+        });
+      }
+    }
+    return devices;
   }
 }

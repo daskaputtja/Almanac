@@ -171,3 +171,16 @@ export function endReasonLabel(reason: string | null): string {
   if (!reason) return 'Unknown';
   return END_REASON_LABELS[reason] ?? sentenceCase(reason.replace(/_/g, ' '));
 }
+
+/** "1.4 TB", "62.3 GB", "850 MB". */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return '0 GB';
+  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(bytes >= 1e11 ? 0 : 1)} GB`;
+  return `${Math.round(bytes / 1e6)} MB`;
+}
+
+/** "12%" from 0.12; a dash when there isn't enough to say. */
+export function formatRate(rate: number | null | undefined): string {
+  return rate == null ? '—' : `${(rate * 100).toFixed(rate < 0.1 ? 1 : 0)}%`;
+}

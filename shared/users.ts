@@ -1,3 +1,5 @@
+import type { RegisteredDevice, UserDownloads } from './accounts.js';
+
 export interface UserSummary {
   id: string;
   name: string;
@@ -31,4 +33,8 @@ export interface UserDetail extends UserSummary {
   profiles: { name: string; plays: number; lastPlayedAt: string }[];
   devices: { player: string; platform: string | null; plays: number; lastPlayedAt: string }[];
   addresses: { ip: string; plays: number; firstSeenAt: string; lastSeenAt: string }[];
+  /** Offline downloads (download addresses only for admins). */
+  downloads: UserDownloads;
+  /** Devices signed in to the account in Silo. */
+  registeredDevices: RegisteredDevice[];
 }

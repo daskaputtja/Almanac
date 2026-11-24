@@ -3,6 +3,9 @@ import type {
   HistoryPageQuery,
   SiloCatalogItem,
   SiloCollection,
+  SiloDevice,
+  SiloDownload,
+  SiloPlaybackActivity,
   SiloHistoryEntry,
   SiloLibrary,
   SiloNodeDetail,
@@ -51,12 +54,20 @@ export interface ServerSource {
   /** Load samples for the last `hours` hours (Silo keeps about 31 days). */
   timeseries(hours: number): Promise<SiloTimeseries>;
   nodeDetails(): Promise<SiloNodeDetail[]>;
+  /** Sessions started and watched to the end over the last `hours` hours. */
+  playbackActivity(hours: number): Promise<SiloPlaybackActivity>;
+}
+
+/** Offline downloads and registered devices, across every account. */
+export interface AccountSource {
+  listDownloads(): Promise<SiloDownload[]>;
+  listDevices(): Promise<SiloDevice[]>;
 }
 
 const PAGE_SIZE = 200; // Silo's maximum
 const MAX_PAGES = 50; // stop runaway paging if a cursor never ends
 
-export class SiloClient implements SessionSource, HistorySource, CatalogSource, ServerSource {
+export class SiloClient implements SessionSource, HistorySource, CatalogSource, ServerSource, AccountSource {
   private readonly baseUrl: string;
 
   constructor(
@@ -191,6 +202,61 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
 
   timeseries(hours: number): Promise<SiloTimeseries> {
     return this.get<SiloTimeseries>('/api/v2/admin/stats/timeseries', { hours: Math.min(744, Math.max(1, Math.round(hours))) });
+  }
+
+  playbackActivity(hours: number): Promise<SiloPlaybackActivity> {
+    return this.get<SiloPlaybackActivity>('/api/v2/admin/stats/playback-activity', { hours: Math.min(744, Math.max(1, Math.round(hours))) });
+  }
+
+  async listDownloads(): Promise<SiloDownload[]> {
+    const items = await this.walkAll<SiloDownload>('/api/v2/admin/downloads/entries');
+    // Keep what Almanac shows; drop paths, batch IDs and the like.
+    return items.map((d) => ({
+      id: d.id,
+      user_id: String(d.user_id),
+      username: d.username,
+      profile_id: d.profile_id,
+      device_id: d.device_id,
+      device_name: d.device_name,
+      content_id: d.content_id,
+      title: d.title,
+      media_type: d.media_type,
+      episode: d.episode ? { season_number: d.episode.season_number, episode_number: d.episode.episode_number, title: d.episode.title } : null,
+      status: d.status,
+      quality: d.quality,
+      file_size: d.file_size,
+      created_at: d.created_at,
+      completed_at: d.completed_at ?? null,
+      revoked_at: d.revoked_at,
+      created_client_ip: d.created_client_ip ?? null,
+    }));
+  }
+
+  async listDevices(): Promise<SiloDevice[]> {
+    const items = await this.walkAll<SiloDevice>('/api/v2/admin/devices');
+    return items.map((d) => ({
+      user_id: String(d.user_id),
+      username: d.username,
+      device_id: d.device_id,
+      device_name: d.device_name,
+      device_platform: d.device_platform,
+      profile_count: d.profile_count,
+      profiles: (d.profiles ?? []).map((p) => ({ profile_id: p.profile_id, profile_name: p.profile_name })),
+      last_updated: d.last_updated ?? null,
+    }));
+  }
+
+  /** Every page of a cursor-paged admin list. */
+  private async walkAll<T>(path: string, maxPages = 200): Promise<T[]> {
+    const items: T[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < maxPages; page++) {
+      const result = await this.get<SiloCollection<T>>(path, { limit: PAGE_SIZE, cursor });
+      items.push(...result.items);
+      cursor = result.page?.has_more ? result.page.next_cursor : undefined;
+      if (!cursor) break;
+    }
+    return items;
   }
 
   async nodeDetails(): Promise<SiloNodeDetail[]> {

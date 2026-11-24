@@ -29,6 +29,14 @@ export interface PlayForDetection {
   player: string | null;
 }
 
+/** Offline downloads and signed-in devices, from Silo's admin API. */
+export interface AccountExtras {
+  /** Downloads started in the window, including ones since deleted. */
+  downloads: { createdAt: string; sizeBytes: number | null; title: string; deviceName: string | null }[];
+  /** Signed-in devices used in the last 30 days. */
+  activeDevices: { name: string; platform: string | null }[];
+}
+
 export interface LiveStreamForDetection {
   ip: string | null;
   player: string | null;
@@ -92,9 +100,11 @@ export function detectFlags(
   windowDays: number,
   live: LiveStreamForDetection[] = [],
   thresholds: FlagThresholds = DEFAULT_THRESHOLDS,
+  extras: AccountExtras = { downloads: [], activeDevices: [] },
 ): DetectedFlag[] {
   const T = thresholds;
   const flags: DetectedFlag[] = [];
+  flags.push(...accountFlags(extras, windowDays, T));
   const sorted = [...plays].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const spans = sorted.map((p) => ({ play: p, start: Date.parse(p.startedAt), end: Date.parse(p.endedAt), network: networkOf(p.ip) }));
 
@@ -275,4 +285,54 @@ export function detectFlags(
   }
 
   return flags;
+}
+
+/** Flags from offline downloads and signed-in devices. */
+function accountFlags(extras: AccountExtras, windowDays: number, T: FlagThresholds): DetectedFlag[] {
+  const flags: DetectedFlag[] = [];
+
+  const count = extras.downloads.length;
+  const gb = extras.downloads.reduce((sum, d) => sum + (d.sizeBytes ?? 0), 0) / 1e9;
+  const byCount = severityFor(count, T.downloadsInWindow);
+  const bySize = severityFor(gb, T.downloadGbInWindow);
+  if (byCount || bySize) {
+    const severity = [byCount, bySize].includes('high') ? 'high' : [byCount, bySize].includes('medium') ? 'medium' : 'low';
+    const devices = [...new Set(extras.downloads.map((d) => d.deviceName).filter((n): n is string => Boolean(n)))];
+    const titles = [...new Set(extras.downloads.map((d) => d.title))];
+    const sorted = [...extras.downloads].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    flags.push({
+      kind: 'heavy_downloads',
+      severity,
+      value: Math.max(count, Math.round(gb / 5)),
+      headline: `Downloaded ${plural(count, 'title')} (${formatGb(gb)}) for offline viewing in ${windowDays} days`,
+      details: [
+        `From ${when(Date.parse(sorted[0]!.createdAt))} to ${when(Date.parse(sorted[sorted.length - 1]!.createdAt))}${devices.length ? ` to ${devices.slice(0, 4).join(', ')}${devices.length > 4 ? ` and ${devices.length - 4} more` : ''}` : ''}.`,
+        `Including ${titles.slice(0, 5).join(', ')}${titles.length > 5 ? ` and ${titles.length - 5} more` : ''}.`,
+      ],
+      adminDetails: [],
+    });
+  }
+
+  const devices = extras.activeDevices.length;
+  const deviceSeverity = severityFor(devices, T.devicesRegistered);
+  if (deviceSeverity) {
+    const platforms = new Map<string, number>();
+    for (const d of extras.activeDevices) platforms.set(d.platform ?? 'unknown', (platforms.get(d.platform ?? 'unknown') ?? 0) + 1);
+    flags.push({
+      kind: 'many_registered_devices',
+      severity: deviceSeverity,
+      value: devices,
+      headline: `${devices} devices signed in and used in the last 30 days`,
+      details: [
+        `By kind: ${[...platforms].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${n} ${p}`).join(', ')}.`,
+        'Most accounts have under 10. A family with several TVs and phones can reach the low teens.',
+      ],
+      adminDetails: [],
+    });
+  }
+  return flags;
+}
+
+function formatGb(gb: number): string {
+  return gb >= 1000 ? `${(gb / 1000).toFixed(1)} TB` : `${Math.round(gb)} GB`;
 }

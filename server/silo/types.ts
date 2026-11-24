@@ -266,3 +266,53 @@ export interface SiloNodeDetail {
     system?: { cpu_pct?: number; cores?: number; load1?: number; mem_used_mb?: number; mem_total_mb?: number };
   };
 }
+
+/** One offline download from `GET /api/v2/admin/downloads/entries`. */
+export interface SiloDownload {
+  id: string;
+  user_id: string;
+  username?: string;
+  profile_id?: string;
+  device_id?: string;
+  device_name?: string;
+  /** The movie, or the series for an episode. */
+  content_id?: string;
+  title?: string;
+  media_type?: string;
+  episode?: { season_number?: number; episode_number?: number; title?: string } | null;
+  /** preparing, ready, downloading, completed, failed or revoked. */
+  status?: string;
+  quality?: string;
+  file_size?: number;
+  created_at: string;
+  completed_at?: string | null;
+  revoked_at?: string;
+  created_client_ip?: string | null;
+}
+
+/** A device registered to an account, from `GET /api/v2/admin/devices`. */
+export interface SiloDevice {
+  user_id: string;
+  username?: string;
+  device_id: string;
+  device_name?: string;
+  device_platform?: string;
+  profile_count?: number;
+  profiles?: { profile_id: string; profile_name?: string }[];
+  last_updated?: string | null;
+}
+
+/** From `GET /api/v2/admin/stats/playback-activity`. */
+export interface SiloPlaybackActivity {
+  hours?: number;
+  reliability?: {
+    sessions_started?: number;
+    transcode_starts?: number;
+    finalized_sessions?: number;
+    /** Sessions watched to the end. */
+    completed_sessions?: number;
+    completion_rate?: number;
+    unique_profiles?: number;
+  };
+  profiles_active_24h?: number;
+}

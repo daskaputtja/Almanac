@@ -53,6 +53,7 @@ export function NotificationsPage() {
         <>
           <ChannelsCard channels={data.channels} libraries={data.libraries} onChange={load} />
           <KeysCard keys={data.keys} onChange={load} />
+          {data.staff && <StaffCard staff={data.staff} onChange={load} />}
           <LogCard log={data.log} />
         </>
       )}
@@ -476,6 +477,89 @@ function KeyForm({
         )}
       </div>
     </form>
+  );
+}
+
+// --- Staff alerts ------------------------------------------------------------------
+
+function StaffCard({ staff, onChange }: { staff: NonNullable<NotificationsResponse['staff']>; onChange: () => void }) {
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const problem = webhookUrl.trim() && !DISCORD_WEBHOOK_PATTERN.test(webhookUrl.trim()) ? 'That doesn’t look like a Discord webhook address.' : null;
+
+  const act = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fn();
+      setMessage({ ok: true, text: done });
+      setWebhookUrl('');
+      onChange();
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Something went wrong.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-line bg-panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Staff alerts → Discord</h2>
+        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <StatusIcon status={staff.alerting ? 'failed' : staff.webhookHint ? 'sent' : 'skipped'} />
+          {staff.alerting ? 'Alerting now' : staff.webhookHint ? `Posting to ${staff.webhookHint}` : 'No staff channel yet'}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-ink-muted">
+        A private channel for you and your mods. Almanac posts here when streams start dropping much more than usual for the time of day (checked every
+        15 minutes against the last two weeks), and again when things are back to normal.
+      </p>
+      <form
+        className="mt-4 flex flex-wrap items-start gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!problem) void act(() => api('/api/notifications/staff', { method: 'POST', body: { webhookUrl: webhookUrl.trim() } }), 'Saved.');
+        }}
+      >
+        <input
+          type="password"
+          autoComplete="off"
+          value={webhookUrl}
+          onChange={(e) => setWebhookUrl(e.target.value)}
+          placeholder={staff.webhookHint ? 'Paste a new webhook to replace it' : 'https://discord.com/api/webhooks/…'}
+          className={`${input} min-w-0 flex-1 basis-72`}
+          aria-label="Staff webhook address"
+        />
+        <button type="submit" disabled={busy || !webhookUrl.trim() || Boolean(problem)} className={primary}>
+          Save
+        </button>
+      </form>
+      {problem && <p className="mt-1 text-xs text-red-200">{problem}</p>}
+      {staff.webhookHint && (
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={staff.reliability}
+              disabled={busy}
+              onChange={(e) => void act(() => api('/api/notifications/staff', { method: 'POST', body: { reliability: e.target.checked } }), 'Saved.')}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Alert when streams drop much more than usual
+          </label>
+          <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/staff/test', { method: 'POST' }), 'Sent a test alert. Check the channel in Discord.')}>
+            Send test
+          </button>
+          <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/staff', { method: 'POST', body: { webhookUrl: null } }), 'Removed.')}>
+            Remove
+          </button>
+          {staff.lastAlertAt && <span className="text-xs text-ink-faint">Last alert {formatWhen(staff.lastAlertAt)}</span>}
+        </div>
+      )}
+      {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+    </section>
   );
 }
 

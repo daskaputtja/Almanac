@@ -132,6 +132,9 @@ export class UsersService {
       profiles,
       devices: [...devices.values()],
       addresses,
+      // Filled in by the route, which knows whether the viewer may see addresses.
+      downloads: { last30Days: 0, last30DaysBytes: 0, total: 0, totalBytes: 0, onDevices: 0, recent: [] },
+      registeredDevices: [],
     };
   }
 }

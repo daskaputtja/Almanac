@@ -300,6 +300,40 @@ const MIGRATIONS: string[] = [
   /* 15: account email addresses, to help mods recognise people */ `
     ALTER TABLE silo_users ADD COLUMN email TEXT;
   `,
+  /* 16: offline downloads (kept after Silo forgets them) and registered devices */ `
+    CREATE TABLE downloads (
+      id             TEXT PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      username       TEXT,
+      device_name    TEXT,
+      content_id     TEXT,
+      title          TEXT,
+      media_type     TEXT,
+      season_number  INTEGER,
+      episode_number INTEGER,
+      episode_title  TEXT,
+      status         TEXT,
+      quality        TEXT,
+      file_size      INTEGER,
+      client_ip      TEXT,
+      created_at     TEXT NOT NULL,
+      completed_at   TEXT,
+      present        INTEGER NOT NULL DEFAULT 1, -- still listed by Silo
+      synced_at      TEXT NOT NULL
+    );
+    CREATE INDEX downloads_created ON downloads (created_at);
+    CREATE INDEX downloads_user ON downloads (user_id, created_at);
+    CREATE TABLE registered_devices (
+      user_id      TEXT NOT NULL,
+      device_id    TEXT NOT NULL,
+      device_name  TEXT,
+      platform     TEXT,
+      profiles     TEXT,             -- JSON array of profile names
+      last_used_at TEXT,
+      synced_at    TEXT NOT NULL,
+      PRIMARY KEY (user_id, device_id)
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;

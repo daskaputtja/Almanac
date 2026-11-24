@@ -17,10 +17,11 @@ import {
   useStats,
 } from '../components/StatsSections';
 import { NotesAndTags } from '../components/NotesAndTags';
+import { DownloadList } from './DownloadsTab';
 import { WhereSection } from '../components/WhereSection';
 import { TopList } from '../components/TopList';
 import { UserTags } from '../components/UserTags';
-import { episodeCode, formatDuration, formatFullDate, formatWhen, livePosition, platformLabel } from '../lib/format';
+import { episodeCode, formatBytes, formatDuration, formatFullDate, formatWhen, livePosition, platformLabel } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
 import { useActivity, useNow } from '../lib/useActivity';
 
@@ -213,6 +214,27 @@ export function UserPage({ userId }: { userId: string }) {
             title="Profiles"
             headers={['Profile', 'Plays', 'Last used']}
             rows={user.profiles.map((p) => [p.name, p.plays.toLocaleString(), formatWhen(p.lastPlayedAt)])}
+          />
+        </div>
+      )}
+
+      {user && (
+        <div className="grid gap-5 xl:grid-cols-[3fr_2fr]">
+          <section className="overflow-hidden rounded-xl border border-line bg-panel">
+            <div className="flex flex-wrap items-baseline justify-between gap-2 px-4 pt-4">
+              <h2 className="text-sm font-semibold">Offline downloads</h2>
+              <p className="text-xs text-ink-muted">
+                {user.downloads.last30Days.toLocaleString()} in the last 30 days ({formatBytes(user.downloads.last30DaysBytes)}) ·{' '}
+                {user.downloads.onDevices.toLocaleString()} on devices now · {user.downloads.total.toLocaleString()} ever ({formatBytes(user.downloads.totalBytes)})
+              </p>
+            </div>
+            <DownloadList entries={user.downloads.recent} />
+          </section>
+          <SimpleTable
+            title={`Signed-in devices (${user.registeredDevices.length})`}
+            headers={['Device', 'Kind', 'Profiles', 'Last used']}
+            rows={user.registeredDevices.map((d) => [d.name, platformLabel(d.platform) ?? '—', d.profiles.join(', ') || '—', d.lastUsedAt ? formatWhen(d.lastUsedAt) : 'Never'])}
+            note="Every device signed in to this account in Silo, whether or not it has played anything."
           />
         </div>
       )}

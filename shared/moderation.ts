@@ -12,7 +12,11 @@ export type FlagKind =
   /** Playing most of every day. */
   | 'heavy_daily'
   /** Title after title played start to finish with no pauses. */
-  | 'back_to_back';
+  | 'back_to_back'
+  /** A lot of offline downloads in a week. */
+  | 'heavy_downloads'
+  /** Many devices registered to the account and in use. */
+  | 'many_registered_devices';
 
 export type FlagGroup = 'sharing' | 'nonstop' | 'ripping';
 
@@ -25,6 +29,8 @@ export const FLAG_GROUP: Record<FlagKind, FlagGroup> = {
   nonstop: 'nonstop',
   heavy_daily: 'nonstop',
   back_to_back: 'ripping',
+  heavy_downloads: 'ripping',
+  many_registered_devices: 'sharing',
 };
 
 export const GROUP_LABELS: Record<FlagGroup, { title: string; meaning: string }> = {
@@ -38,7 +44,7 @@ export const GROUP_LABELS: Record<FlagGroup, { title: string; meaning: string }>
   },
   ripping: {
     title: 'Possible ripping',
-    meaning: 'Playing title after title start to finish without pausing is how libraries get recorded or downloaded.',
+    meaning: 'Playing title after title start to finish without pausing, or downloading a lot for offline viewing, is how libraries get copied.',
   },
 };
 
@@ -112,7 +118,10 @@ export type ThresholdKey =
   | 'nonstopHours'
   | 'dailyHours'
   | 'backToBack'
-  | 'backToBackMovies';
+  | 'backToBackMovies'
+  | 'devicesRegistered'
+  | 'downloadsInWindow'
+  | 'downloadGbInWindow';
 
 export type FlagThresholds = Record<ThresholdKey, ThresholdLevels>;
 
@@ -129,6 +138,9 @@ export const DEFAULT_THRESHOLDS: FlagThresholds = {
   dailyHours: { enabled: true, medium: 12, high: 18 },
   backToBack: { enabled: true, medium: 20, high: 40 },
   backToBackMovies: { enabled: true, medium: 5, high: 8 },
+  devicesRegistered: { enabled: true, low: 15, medium: 25 },
+  downloadsInWindow: { enabled: true, medium: 40, high: 80 },
+  downloadGbInWindow: { enabled: true, medium: 200, high: 400 },
 };
 
 export interface ThresholdInfo {
@@ -206,6 +218,33 @@ export const THRESHOLD_INFO: Record<ThresholdKey, ThresholdInfo> = {
     min: 2,
     max: 100,
   },
+  devicesRegistered: {
+    group: 'sharing',
+    label: 'Devices signed in',
+    description: 'Devices signed in to the account in Silo and used in the last 30 days, whether or not they played anything. Most accounts have under 10.',
+    unit: 'devices',
+    levels: ['low', 'medium'],
+    min: 2,
+    max: 500,
+  },
+  downloadsInWindow: {
+    group: 'ripping',
+    label: 'Offline downloads in a week',
+    description: 'Movies and episodes downloaded to devices for offline viewing over 7 days, including ones since deleted. Downloads are full copies of the file.',
+    unit: 'downloads',
+    levels: ['medium', 'high'],
+    min: 2,
+    max: 2000,
+  },
+  downloadGbInWindow: {
+    group: 'ripping',
+    label: 'Offline download size in a week',
+    description: 'Total size of those downloads. A 4K movie is often 40 to 80 GB.',
+    unit: 'GB',
+    levels: ['medium', 'high'],
+    min: 1,
+    max: 100000,
+  },
 };
 
 export const LEVEL_LABELS: Record<Level, string> = { low: 'Minor', medium: 'Worth a look', high: 'Serious' };
@@ -258,6 +297,9 @@ export const THRESHOLD_KIND: Record<ThresholdKey, FlagKind> = {
   dailyHours: 'heavy_daily',
   backToBack: 'back_to_back',
   backToBackMovies: 'back_to_back',
+  devicesRegistered: 'many_registered_devices',
+  downloadsInWindow: 'heavy_downloads',
+  downloadGbInWindow: 'heavy_downloads',
 };
 
 export interface PreviewCounts {

@@ -6,13 +6,17 @@ import { Stat } from '../components/StatsSections';
 import { api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
+import { DownloadsTab } from './DownloadsTab';
+import { ReliabilityTab } from './ReliabilityTab';
 import { TranscodesTab } from './TranscodesTab';
 
-type Tab = 'load' | 'nodes' | 'transcodes';
+type Tab = 'load' | 'nodes' | 'transcodes' | 'reliability' | 'downloads';
 const TABS: [Tab, string][] = [
   ['load', 'Load'],
   ['nodes', 'Nodes'],
   ['transcodes', 'Transcodes'],
+  ['reliability', 'Reliability'],
+  ['downloads', 'Downloads'],
 ];
 
 const COLORS = { peak: '#9085e9', average: '#3987e5', transcodes: '#d95926' };
@@ -25,7 +29,7 @@ export function ServerPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold">Server</h1>
-        <p className="text-sm text-ink-muted">How hard Silo is working, node by node, and what makes it transcode.</p>
+        <p className="text-sm text-ink-muted">How hard Silo is working, node by node, what makes it transcode, how reliably streams play, and what people download.</p>
       </div>
       <nav className="flex gap-1 border-b border-line" aria-label="Server sections">
         {TABS.map(([t, label]) => (
@@ -44,6 +48,8 @@ export function ServerPage() {
       {tab === 'load' && <LoadTab search={search} />}
       {tab === 'nodes' && <NodesTab />}
       {tab === 'transcodes' && <TranscodesTab />}
+      {tab === 'reliability' && <ReliabilityTab search={search} />}
+      {tab === 'downloads' && <DownloadsTab />}
     </div>
   );
 }

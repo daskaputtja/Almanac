@@ -47,7 +47,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 ### Users ✅
 - Every account, with its email to make people easy to recognise, combining Silo's details (role, enabled, member since, last active) with plays, watch time, last watched, top platform and direct-play share
 - Search by name or email, sort, and filter by recent activity or disabled accounts
-- A page for each user: what they're watching now, their charts and top titles, recent plays, and the players, IP addresses and profiles they use
+- A page for each user: what they're watching now, their charts and top titles, recent plays, the players, IP addresses and profiles they use, their offline downloads and every device signed in to the account
 
 ### Libraries ✅
 - **Trending:** what's rising this week, the most-watched titles by viewers, and shows people are bingeing right now
@@ -57,9 +57,9 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 
 ### Moderation ✅
 - **Account flags**, checked every 5 minutes over the last 7 days:
-  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, or 7 or more devices in a week
+  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, or 15 or more devices signed in to the account and used in the last 30 days
   - *Non-stop playback* (restreaming, or a TV left on): 24 hours or more without a break, or 12 or more hours a day on average
-  - *Possible ripping:* 20 or more titles (or 5 or more movies) played to the end back to back with no pauses, or finished much faster than their running time
+  - *Possible ripping:* 20 or more titles (or 5 or more movies) played to the end back to back with no pauses, or finished much faster than their running time; or 40 or more offline downloads (or 200 GB or more) in a week
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
 - *Mark as reviewed* with a note; a reviewed flag reopens if the behaviour gets clearly worse
 - "On 3 networks now" badges on Activity while it's happening
@@ -80,6 +80,8 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - **Load:** streams and bandwidth over the last day, week, month, 3 months or year, with peaks, and a heatmap of a typical week so you can plan maintenance in the quiet hours
 - **Nodes:** each Silo node with its status, version, streams and bandwidth
 - **Transcode doctor:** why streams are being converted, which players and files cause it most, and suggestions for fixing it
+- **Reliability:** how many streams drop (the player stopped answering mid-stream) or stop within 10 seconds, compared with what's usual, by player and by playback method, alongside Silo's count of streams watched to the end. Admins can have a staff Discord channel alerted when drops jump
+- **Downloads:** what people have downloaded in Silo's apps for offline viewing, the biggest downloaders, and what's on devices now. Almanac keeps its own record, so deleted downloads still count
 
 ### Discord notifications ✅ (admins)
 - Newly added movies and episodes posted to Discord, with a separate webhook for each channel and any mix of libraries per channel
@@ -255,6 +257,8 @@ server/            The Almanac server (Hono on Node.js)
   load/            Server load history
   transcodes/      The transcode doctor
   trending/        Trending titles
+  accounts/        Offline downloads and signed-in devices, copied from Silo
+  reliability/     How reliably streams play, and the staff alert
   geo/             Looking up where viewers are
   notify/          Discord posts for recently added, and TMDB/TVDB lookups
   users/           Accounts combined with their play history

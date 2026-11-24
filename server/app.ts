@@ -25,6 +25,10 @@ import { LOAD_RANGES, type LoadRange } from '../shared/load.js';
 import { RecapError, type RecapService } from './recap/recap.js';
 import { ShareError, type RecapShares } from './recap/shares.js';
 import type { GeoService } from './geo/geo.js';
+import type { AccountsService } from './accounts/accounts.js';
+import type { ReliabilityService } from './reliability/reliability.js';
+import type { StaffAlerts } from './notify/staff.js';
+import { RELIABILITY_RANGES, type ReliabilityRange } from '../shared/reliability.js';
 import { MetadataError, type MetadataService } from './notify/metadata.js';
 import { NotifyError, type Notifier } from './notify/notifier.js';
 import type { NotifyChannelInput } from '../shared/notifications.js';
@@ -49,6 +53,9 @@ export interface AppServices {
   geo: GeoService;
   notifier: Notifier;
   metadata: MetadataService;
+  accounts: AccountsService;
+  reliability: ReliabilityService;
+  staff: StaffAlerts;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -111,7 +118,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -244,9 +251,15 @@ export function createApp(
 
   app.get('/api/users', (c) => c.json({ users: users.list() }));
   app.get('/api/users/:id', (c) => {
-    const user = users.get(c.req.param('id'));
-    if (!user) return c.json({ error: 'No such user' }, 404);
+    const found = users.get(c.req.param('id'));
+    if (!found) return c.json({ error: 'No such user' }, 404);
+    const user = { ...found, downloads: accounts.forUser(found.id, seesIps(c)), registeredDevices: accounts.devicesForUser(found.id) };
     return c.json(seesIps(c) ? user : userWithoutIps(user));
+  });
+  app.get('/api/downloads', (c) => c.json(accounts.overview(seesIps(c))));
+  app.get('/api/server/reliability', async (c) => {
+    const range = c.req.query('range') ?? '7d';
+    return c.json(await reliability.report((range in RELIABILITY_RANGES ? range : '7d') as ReliabilityRange));
   });
 
   app.get('/api/libraries', (c) => c.json(library.libraries()));
@@ -349,7 +362,23 @@ export function createApp(
     enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
   });
   const optionalText = (value: unknown) => (value === undefined ? undefined : typeof value === 'string' ? value : null);
-  app.get('/api/notifications', notifications, (c) => c.json(notifier.overview()));
+  app.get('/api/notifications', notifications, (c) => c.json({ ...notifier.overview(), staff: staff.view() }));
+  app.post('/api/notifications/staff', notifications, async (c) => {
+    const body = await jsonBody(c);
+    return c.json(
+      staff.update(
+        {
+          webhookUrl: body.webhookUrl === null ? null : typeof body.webhookUrl === 'string' ? body.webhookUrl : undefined,
+          reliability: typeof body.reliability === 'boolean' ? body.reliability : undefined,
+        },
+        c.get('session').user.username,
+      ),
+    );
+  });
+  app.post('/api/notifications/staff/test', notifications, async (c) => {
+    await staff.test();
+    return c.json({ ok: true });
+  });
   app.post('/api/notifications/channels', notifications, async (c) => {
     const channel = notifier.create(channelInput(await jsonBody(c)), c.get('session').user.username);
     return c.json(channel, 201);

@@ -58,7 +58,10 @@ export function LineChart<K extends string>({
 
   const path = (key: K) => points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.values[key] ?? 0).toFixed(1)}`).join('');
   const labelCount = Math.max(2, Math.floor(innerW / 110));
-  const labelTimes = Array.from({ length: labelCount }, (_, i) => t0 + ((t1 - t0) * i) / (labelCount - 1));
+  // With only a few points, label the points themselves; never repeat a label.
+  const labelTimes = (
+    points.length <= labelCount ? points.map((p) => p.t) : Array.from({ length: labelCount }, (_, i) => t0 + ((t1 - t0) * i) / (labelCount - 1))
+  ).filter((t, i, all) => i === 0 || formatAxisTime(t) !== formatAxisTime(all[i - 1]!));
 
   const nearest = (clientX: number, rect: DOMRect) => {
     if (!points.length) return null;

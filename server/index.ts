@@ -9,13 +9,16 @@ import { HistorySync } from './history/sync.js';
 import { LibraryService } from './library/library.js';
 import { CatalogSync } from './library/sync.js';
 import { type CatalogSource, type HistorySource, type SessionSource, SiloClient } from './silo/client.js';
-import { MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSource } from './silo/mock.js';
+import { MockAccountSource, MockCatalogSource, MockHistorySource, MockServerSource, MockSessionSource } from './silo/mock.js';
 import { ServerOverviewService } from './server/overview.js';
 import { RecapService } from './recap/recap.js';
 import { RecapShares } from './recap/shares.js';
 import { GeoService } from './geo/geo.js';
 import { MetadataService } from './notify/metadata.js';
 import { Notifier } from './notify/notifier.js';
+import { StaffAlerts } from './notify/staff.js';
+import { AccountsService } from './accounts/accounts.js';
+import { ReliabilityService } from './reliability/reliability.js';
 import { dirname } from 'node:path';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
@@ -123,7 +126,16 @@ const metadata = new MetadataService(db);
 const notifier = new Notifier(db, catalogSource, metadata);
 notifier.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata });
+// Offline downloads and signed-in devices, copied from Silo every 10 minutes.
+const accounts = new AccountsService(db, silo ?? new MockAccountSource());
+accounts.start();
+
+// How reliably streams play, with an optional alert to a staff Discord channel.
+const staff = new StaffAlerts(db);
+const reliability = new ReliabilityService(db, serverSource, staff);
+reliability.start();
+
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -145,6 +157,8 @@ function shutdown() {
   load.stop();
   geo.stop();
   notifier.stop();
+  accounts.stop();
+  reliability.stop();
   server.close(() => {
     db.close();
     process.exit(0);

@@ -15,9 +15,11 @@ import {
 } from '../../shared/moderation.js';
 import { type Database, transaction } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
-import { type DetectedFlag, type LiveStreamForDetection, type PlayForDetection, detectFlags } from './detect.js';
+import { type AccountExtras, type DetectedFlag, type LiveStreamForDetection, type PlayForDetection, detectFlags } from './detect.js';
 
 export const WINDOW_DAYS = 7;
+/** Signed-in devices count as in use if Silo saw them this recently. */
+export const DEVICE_WINDOW_DAYS = 30;
 /** A reviewed flag reopens when its measure grows by this much. */
 const REOPEN_GROWTH = 1.25;
 const SEVERITY_RANK: Record<Severity, number> = { low: 1, medium: 2, high: 3 };
@@ -98,14 +100,7 @@ export class ModerationService {
     const count = (thresholds: FlagThresholds): PreviewCounts => {
       const detected = this.detectAll(this.lastLive, now, thresholds);
       const empty = () => ({ low: 0, medium: 0, high: 0 });
-      const byKind: PreviewCounts['byKind'] = {
-        concurrent_networks: empty(),
-        many_networks: empty(),
-        many_devices: empty(),
-        nonstop: empty(),
-        heavy_daily: empty(),
-        back_to_back: empty(),
-      };
+      const byKind = Object.fromEntries(Object.keys(FLAG_GROUP).map((k) => [k, empty()])) as PreviewCounts['byKind'];
       for (const flags of detected.values()) for (const f of flags) byKind[f.kind][f.severity]++;
       return { accounts: detected.size, byKind };
     };
@@ -166,9 +161,28 @@ export class ModerationService {
       });
     }
 
+    // Offline downloads and signed-in devices, copied from Silo by the accounts sync.
+    const extras = new Map<string, AccountExtras>();
+    const extrasFor = (userId: string) => {
+      let e = extras.get(userId);
+      if (!e) extras.set(userId, (e = { downloads: [], activeDevices: [] }));
+      return e;
+    };
+    const downloads = this.db
+      .prepare("SELECT user_id, created_at, file_size, title, device_name FROM downloads WHERE created_at >= ? AND COALESCE(status, '') <> 'failed'")
+      .all(since) as { user_id: string; created_at: string; file_size: number | null; title: string | null; device_name: string | null }[];
+    for (const d of downloads) {
+      extrasFor(d.user_id).downloads.push({ createdAt: d.created_at, sizeBytes: d.file_size, title: d.title || 'Unknown title', deviceName: d.device_name });
+    }
+    const deviceSince = new Date(now - DEVICE_WINDOW_DAYS * 86_400_000).toISOString();
+    const devices = this.db
+      .prepare('SELECT user_id, device_name, platform FROM registered_devices WHERE last_used_at >= ?')
+      .all(deviceSince) as { user_id: string; device_name: string | null; platform: string | null }[];
+    for (const d of devices) extrasFor(d.user_id).activeDevices.push({ name: d.device_name ?? 'Unnamed device', platform: d.platform });
+
     const detected = new Map<string, DetectedFlag[]>();
-    for (const userId of new Set([...byUser.keys(), ...liveByUser.keys()])) {
-      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds);
+    for (const userId of new Set([...byUser.keys(), ...liveByUser.keys(), ...extras.keys()])) {
+      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds, extras.get(userId));
       if (flags.length) detected.set(userId, flags);
     }
     return detected;

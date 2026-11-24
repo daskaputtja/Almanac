@@ -8,6 +8,9 @@ import { base32Decode, base32Encode, codeAt, currentStep, verifyCode } from '../
 import { openDatabase } from '../server/db/database.js';
 import { MetadataService } from '../server/notify/metadata.js';
 import { Notifier } from '../server/notify/notifier.js';
+import { StaffAlerts } from '../server/notify/staff.js';
+import { AccountsService } from '../server/accounts/accounts.js';
+import { ReliabilityService } from '../server/reliability/reliability.js';
 
 /** Tests never talk to Discord, TMDB or TVDB. */
 const failingFetch = async () => {
@@ -27,7 +30,7 @@ import { RecapShares } from '../server/recap/shares.js';
 import { GeoService } from '../server/geo/geo.js';
 import { tmpdir } from 'node:os';
 import { MockServerSource } from '../server/silo/mock.js';
-import { MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
+import { MockAccountSource, MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
 import { UsersService } from '../server/users/users.js';
 
@@ -124,6 +127,9 @@ function makeApp() {
       geo: new GeoService(db, tmpdir(), () => {}),
       notifier: new Notifier(db, new MockCatalogSource(), new MetadataService(db, failingFetch), { fetchImpl: failingFetch, log: () => {} }),
       metadata: new MetadataService(db, failingFetch),
+      accounts: new AccountsService(db, new MockAccountSource(), () => {}),
+      reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
+      staff: new StaffAlerts(db, failingFetch, () => {}),
     },
   );
   return { app, auth, db, history, monitor };
