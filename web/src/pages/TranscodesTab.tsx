@@ -205,7 +205,7 @@ export function TranscodesTab() {
         <section className="overflow-hidden rounded-xl border border-line bg-panel">
           <h2 className="px-4 pt-4 text-sm font-semibold">Files transcoded most</h2>
           <p className="px-4 text-xs text-ink-faint">Re-encoding these, or adding a version that plays directly, avoids the most work.</p>
-          <div className="mt-2 overflow-x-auto">
+          <div className="relative mt-2 overflow-x-auto">
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="text-xs text-ink-faint">
                 <tr>

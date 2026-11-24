@@ -31,13 +31,23 @@ export function ServerPage() {
         <h1 className="text-xl font-semibold">Server</h1>
         <p className="text-sm text-ink-muted">How hard Silo is working, node by node, what makes it transcode, how reliably streams play, and what people download.</p>
       </div>
-      <nav className="flex gap-1 border-b border-line" aria-label="Server sections">
+      <nav
+        ref={(nav) => {
+          // On a phone not every tab fits: keep the open one in view.
+          const current = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+          if (current && nav && (current.offsetLeft + current.offsetWidth > nav.scrollLeft + nav.clientWidth || current.offsetLeft < nav.scrollLeft)) {
+            nav.scrollLeft = current.offsetLeft - 16;
+          }
+        }}
+        className="relative flex gap-1 overflow-x-auto border-b border-line"
+        aria-label="Server sections"
+      >
         {TABS.map(([t, label]) => (
           <Link
             key={t}
             to={t === 'load' ? '/server' : `/server/${t}`}
             aria-current={tab === t ? 'page' : undefined}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm transition-colors ${
               tab === t ? 'border-accent font-medium text-ink' : 'border-transparent text-ink-muted hover:text-ink'
             }`}
           >
@@ -89,7 +99,7 @@ function LoadTab({ search }: { search: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
+      <div className="relative flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
         {LOAD_RANGES.map((r) => (
           <button
             key={r.key}
@@ -235,7 +245,7 @@ function NodesTab() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="border-b border-line text-xs uppercase tracking-wider text-ink-faint">
               <tr>

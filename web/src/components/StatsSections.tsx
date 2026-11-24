@@ -103,7 +103,7 @@ export function useStats(period: string, userId: string | null, rankBy: StatsRan
 
 export function PeriodPicker({ value, onChange }: { value: string; onChange: (period: string) => void }) {
   return (
-    <div className="flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
+    <div className="relative flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
       {Object.entries(PERIODS).map(([key, { label }]) => (
         <button
           key={key}

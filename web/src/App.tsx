@@ -53,7 +53,7 @@ function Shell() {
             <img src="/favicon.svg" alt="" className="h-7 w-7" />
             <span className="text-lg font-semibold tracking-tight">Almanac</span>
           </Link>
-          <nav className="flex min-w-0 gap-1 overflow-x-auto text-sm" aria-label="Main">
+          <nav className="relative flex min-w-0 gap-1 overflow-x-auto text-sm" aria-label="Main">
             {NAV.filter((item) => !item.permission || can(item.permission)).map((item) => {
               if (!item.path) {
                 return (

@@ -53,7 +53,7 @@ export function DownloadsTab() {
                 <tr>
                   <th className="px-4 py-2 font-medium">User</th>
                   <th className="px-4 py-2 text-right font-medium">Downloads</th>
-                  <th className="px-4 py-2 text-right font-medium">Size</th>
+                  <th className="hidden px-4 py-2 text-right font-medium sm:table-cell">Size</th>
                   <th className="hidden px-4 py-2 text-right font-medium sm:table-cell">Latest</th>
                 </tr>
               </thead>
@@ -64,10 +64,13 @@ export function DownloadsTab() {
                       <Link to={`/users/${encodeURIComponent(u.userId)}`} className="font-medium text-accent hover:underline">
                         {u.username}
                       </Link>
-                      {u.email && <div className="max-w-[14rem] truncate text-xs text-ink-faint">{u.email}</div>}
+                      {u.email && <div className="max-w-[11rem] truncate text-xs text-ink-faint sm:max-w-[14rem]">{u.email}</div>}
                     </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{u.downloads.toLocaleString()}</td>
-                    <td className="whitespace-nowrap px-4 py-2 text-right tabular-nums text-ink-muted">{formatBytes(u.bytes)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {u.downloads.toLocaleString()}
+                      <div className="whitespace-nowrap text-xs text-ink-faint sm:hidden">{formatBytes(u.bytes)}</div>
+                    </td>
+                    <td className="hidden whitespace-nowrap px-4 py-2 text-right tabular-nums text-ink-muted sm:table-cell">{formatBytes(u.bytes)}</td>
                     <td className="hidden whitespace-nowrap px-4 py-2 text-right text-ink-muted sm:table-cell" title={formatFullDate(u.lastAt)}>
                       {formatWhen(u.lastAt)}
                     </td>
@@ -108,28 +111,31 @@ export function DownloadList({ entries, showUser }: { entries: DownloadEntry[]; 
   return (
     <ul className="mt-2 max-h-[34rem] divide-y divide-line/60 overflow-auto">
       {entries.map((d) => (
-        <li key={d.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
-          <span className="w-36 shrink-0 text-ink-muted" title={formatFullDate(d.createdAt)}>
-            {formatWhen(d.createdAt)}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">
+        <li key={d.id} className="px-4 py-2.5 text-sm">
+          {/* Title on its own line so it stays readable on a phone; details underneath. */}
+          <div className="flex items-baseline gap-3">
+            <p className="min-w-0 flex-1 break-words">
               <span className="font-medium">{d.title}</span>
               {d.episode && <span className="text-ink-muted"> · {d.episode}</span>}
-            </span>
-            <span className="block truncate text-xs text-ink-faint">
-              {[
-                showUser ? d.username : null,
-                d.deviceName,
-                d.quality === 'original' ? 'Original quality' : d.quality,
-                showIp ? d.ip : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-          </span>
-          <span className={`text-xs ${d.present ? 'text-ink-muted' : 'text-ink-faint'}`}>{d.present ? (STATUS[d.status] ?? d.status) : 'Deleted from device'}</span>
-          <span className="w-16 whitespace-nowrap text-right tabular-nums text-ink-muted">{formatBytes(d.sizeBytes)}</span>
+            </p>
+            <span className="shrink-0 whitespace-nowrap tabular-nums text-ink-muted">{formatBytes(d.sizeBytes)}</span>
+          </div>
+          <p className="mt-0.5 flex flex-wrap gap-x-1.5 text-xs text-ink-faint">
+            {[
+              <span key="when" title={formatFullDate(d.createdAt)}>
+                {formatWhen(d.createdAt)}
+              </span>,
+              showUser ? <span key="user">{d.username}</span> : null,
+              d.deviceName ? <span key="device">{d.deviceName}</span> : null,
+              d.quality ? <span key="quality">{d.quality === 'original' ? 'Original quality' : d.quality}</span> : null,
+              <span key="status" className={d.present ? 'text-ink-muted' : undefined}>
+                {d.present ? (STATUS[d.status] ?? d.status) : 'Deleted from device'}
+              </span>,
+              showIp && d.ip ? <span key="ip">{d.ip}</span> : null,
+            ]
+              .filter(Boolean)
+              .flatMap((part, i) => (i ? [<span key={`dot${i}`} aria-hidden="true">·</span>, part] : [part]))}
+          </p>
         </li>
       ))}
     </ul>

@@ -125,7 +125,7 @@ export function UsersPage() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-line bg-panel">
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="border-b border-line text-xs uppercase tracking-wider text-ink-faint">
               <tr>

@@ -90,7 +90,7 @@ export function AccountsSection({ onSelfChanged }: { onSelfChanged: () => void }
 
       {pending && <ConfirmPanel action={pending} onCancel={() => setPending(null)} />}
 
-      <div className="mt-4 overflow-x-auto">
+      <div className="relative mt-4 overflow-x-auto">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="text-xs text-ink-faint">
             <tr>

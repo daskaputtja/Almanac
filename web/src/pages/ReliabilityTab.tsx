@@ -39,7 +39,7 @@ export function ReliabilityTab({ search }: { search: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
+      <div className="relative flex max-w-full overflow-x-auto rounded-lg border border-line bg-panel p-0.5" role="group" aria-label="Period">
         {(Object.keys(RELIABILITY_RANGES) as ReliabilityRange[]).map((key) => (
           <button
             key={key}

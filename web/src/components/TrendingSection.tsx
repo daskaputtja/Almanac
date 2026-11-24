@@ -45,7 +45,7 @@ function Row({ title, subtitle, children }: { title: string; subtitle: string; c
         <h3 className="text-sm font-semibold">{title}</h3>
         <span className="text-xs text-ink-faint">{subtitle}</span>
       </div>
-      <ul className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">{children}</ul>
+      <ul className="relative -mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">{children}</ul>
     </div>
   );
 }
