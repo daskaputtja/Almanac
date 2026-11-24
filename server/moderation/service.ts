@@ -15,7 +15,7 @@ import {
 } from '../../shared/moderation.js';
 import { type Database, transaction } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
-import { type AccountExtras, type DetectedFlag, type LiveStreamForDetection, type PlayForDetection, detectFlags } from './detect.js';
+import { type AccountExtras, type DetectedFlag, type LiveStreamForDetection, type Locate, type PlayForDetection, detectFlags } from './detect.js';
 
 export const WINDOW_DAYS = 7;
 /** Signed-in devices count as in use if Silo saw them this recently. */
@@ -122,7 +122,7 @@ export class ModerationService {
     const rows = this.db
       .prepare(
         `SELECT user_id, started_at, ended_at, media_type, title, series_title, watched_seconds, paused_seconds,
-                completed, duration_seconds, client_ip, device_id, client_name
+                completed, duration_seconds, client_ip, device_id, client_name, end_reason
          FROM plays WHERE started_at >= ? AND (watched_seconds IS NULL OR watched_seconds >= 30)`,
       )
       .all(since) as {
@@ -139,6 +139,7 @@ export class ModerationService {
       client_ip: string | null;
       device_id: string | null;
       client_name: string | null;
+      end_reason: string | null;
     }[];
 
     const byUser = new Map<string, PlayForDetection[]>();
@@ -158,6 +159,7 @@ export class ModerationService {
         ip: r.client_ip,
         deviceId: r.device_id,
         player: r.client_name,
+        endReason: r.end_reason,
       });
     }
 
@@ -180,9 +182,19 @@ export class ModerationService {
       .all(deviceSince) as { user_id: string; device_name: string | null; platform: string | null }[];
     for (const d of devices) extrasFor(d.user_id).activeDevices.push({ name: d.device_name ?? 'Unnamed device', platform: d.platform });
 
+    // Where addresses are, from the viewer map's local lookups (empty if that's turned off).
+    const places = new Map(
+      (
+        this.db
+          .prepare('SELECT ip, country_code, city FROM ip_locations WHERE country_code IS NOT NULL AND ip IN (SELECT DISTINCT client_ip FROM plays WHERE started_at >= ?)')
+          .all(since) as { ip: string; country_code: string; city: string | null }[]
+      ).map((r) => [r.ip, { country: r.country_code, city: r.city }]),
+    );
+    const locate: Locate = (ip) => places.get(ip) ?? null;
+
     const detected = new Map<string, DetectedFlag[]>();
     for (const userId of new Set([...byUser.keys(), ...liveByUser.keys(), ...extras.keys()])) {
-      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds, extras.get(userId));
+      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds, extras.get(userId), locate);
       if (flags.length) detected.set(userId, flags);
     }
     return detected;

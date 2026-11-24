@@ -52,7 +52,7 @@ describe('detectFlags', () => {
   });
 
   it('flags three or more networks at the same time', () => {
-    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4' }), play(10.6, 1, { ip: '192.0.2.8' })];
+    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4', deviceId: 'device-2' }), play(10.6, 1, { ip: '192.0.2.8', deviceId: 'device-3' })];
     const flags = detectFlags(three, 7);
     expect(kinds(flags)).toEqual(['concurrent_networks']);
     expect(flags[0]!.severity).toBe('medium');
@@ -60,8 +60,39 @@ describe('detectFlags', () => {
     expect(flags[0]!.headline).not.toMatch(/\d+\.\d+\.\d+/); // no addresses in what mods see
     expect(flags[0]!.details.join(' ')).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
 
-    const four = [...three, play(10.7, 1, { ip: '198.18.0.1' })];
+    const four = [...three, play(10.7, 1, { ip: '198.18.0.1', deviceId: 'device-4' })];
     expect(detectFlags(four, 7)[0]!.severity).toBe('high');
+  });
+
+  it('doesn’t count one device in two places, or a timed-out stream’s last minutes', () => {
+    // A phone switches from Wi-Fi to mobile data: same device, new network.
+    const phone = [play(10, 1), play(10.5, 1, { ip: '198.51.100.4' }), play(10.6, 1, { ip: '192.0.2.8' })];
+    expect(kinds(detectFlags(phone, 7))).not.toContain('concurrent_networks');
+    // Three devices, but one stream had already died (it timed out 8 minutes later).
+    const stale = [
+      play(10, 0.6, { deviceId: 'a', endReason: 'expired' }),
+      play(10.5, 1, { ip: '198.51.100.4', deviceId: 'b' }),
+      play(10.55, 1, { ip: '192.0.2.8', deviceId: 'c' }),
+    ];
+    expect(kinds(detectFlags(stale, 7))).not.toContain('concurrent_networks');
+  });
+
+  it('says where simultaneous streams were', () => {
+    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4', deviceId: 'b' }), play(10.6, 1, { ip: '192.0.2.8', deviceId: 'c' })];
+    const places: Record<string, { country: string; city: string }> = {
+      '203.0.113.10': { country: 'GB', city: 'Leeds' },
+      '198.51.100.4': { country: 'SE', city: 'Gothenburg' },
+      '192.0.2.8': { country: 'CA', city: 'Montreal' },
+    };
+    const flag = detectFlags(three, 7, [], undefined, undefined, (ip) => places[ip] ?? null).find((f) => f.kind === 'concurrent_networks')!;
+    expect(flag.details.join(' ')).toContain('3 different countries: United Kingdom, Sweden, Canada');
+    expect(flag.details.join(' ')).not.toContain('Leeds'); // towns are for admins
+    expect(flag.adminDetails.join(' ')).toContain('Leeds, United Kingdom');
+  });
+
+  it('counts web browsers on one network as one device', () => {
+    const browsers = Array.from({ length: 9 }, (_, i) => play(i * 3, 1, { deviceId: `browser-${i}`, player: 'Silo Web' }));
+    expect(kinds(detectFlags(browsers, 7))).not.toContain('many_devices');
   });
 
   it('counts live streams too', () => {
@@ -156,7 +187,7 @@ function historyEntry(i: number, startMs: number, hours: number, ip: string, use
     start_position_seconds: 0,
     paused_seconds: 0,
     client_ip: ip,
-    device_id: 'd',
+    device_id: `d-${ip}`,
     device_platform: 'android-tv',
     client_name: 'Silo Android TV',
     client_version: '1',
@@ -270,12 +301,12 @@ describe('thresholds', () => {
   });
 
   it('uses the levels it is given, and skips checks that are off', () => {
-    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4' }), play(10.6, 1, { ip: '192.0.2.8' })];
+    const three = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4', deviceId: 'device-2' }), play(10.6, 1, { ip: '192.0.2.8', deviceId: 'device-3' })];
     const stricter = { ...DEFAULT_THRESHOLDS, concurrentNetworks: { enabled: true, medium: 2, high: 3 } };
     expect(detectFlags(three, 7, [], stricter)[0]!.severity).toBe('high');
     const off = { ...DEFAULT_THRESHOLDS, concurrentNetworks: { enabled: false, medium: 3, high: 4 } };
     expect(detectFlags(three, 7, [], off)).toEqual([]);
-    const two = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4' })];
+    const two = [play(10, 2), play(10.5, 1, { ip: '198.51.100.4', deviceId: 'device-2' })];
     expect(kinds(detectFlags(two, 7, [], stricter))).toEqual(['concurrent_networks']);
   });
 

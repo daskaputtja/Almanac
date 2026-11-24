@@ -11,6 +11,8 @@ export const THRESHOLDS = DEFAULT_THRESHOLDS;
 const CONTINUOUS_GAP_MS = 10 * 60_000;
 /** For back-to-back: the next title started within this long of the last ending. */
 const BACK_TO_BACK_GAP_MS = 3 * 60_000;
+/** A play that timed out stops counting as "playing" this long before its recorded end. */
+const STALE_SESSION_MS = 10 * 60_000;
 /** For back-to-back: a play paused for less than this counts as "no pauses". */
 const MAX_PAUSE_SECONDS = 60;
 /** A play marked finished but watched for less than this share of its length was skipped through. */
@@ -29,7 +31,12 @@ export interface PlayForDetection {
   ip: string | null;
   deviceId: string | null;
   player: string | null;
+  /** How the play ended; "expired" means Silo stopped hearing from the player. */
+  endReason?: string | null;
 }
+
+/** Where an address is, from the local geolocation database. */
+export type Locate = (ip: string) => { country: string; city: string | null } | null;
 
 /** Offline downloads and signed-in devices, from Silo's admin API. */
 export interface AccountExtras {
@@ -103,19 +110,36 @@ export function detectFlags(
   live: LiveStreamForDetection[] = [],
   thresholds: FlagThresholds = DEFAULT_THRESHOLDS,
   extras: AccountExtras = { downloads: [], activeDevices: [] },
+  locate: Locate = () => null,
 ): DetectedFlag[] {
   const T = thresholds;
   const flags: DetectedFlag[] = [];
   flags.push(...accountFlags(extras, windowDays, T));
   const sorted = [...plays].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const spans = sorted.map((p) => ({ play: p, start: Date.parse(p.startedAt), end: Date.parse(p.endedAt), network: networkOf(p.ip) }));
+  const spans = sorted.map((p) => {
+    const start = Date.parse(p.startedAt);
+    const end = Date.parse(p.endedAt);
+    // A play that timed out was probably dead for a while before Silo gave up on it
+    // (a phone that lost signal, say), so for being in two places at once its end
+    // doesn't count.
+    const liveUntil = p.endReason === 'expired' ? Math.max(start, end - STALE_SESSION_MS) : end;
+    return { play: p, start, end, liveUntil, network: networkOf(p.ip) };
+  });
 
   // --- Several networks at the same moment ---------------------------------
   // At each play's start, which networks are playing?
-  let worst = { count: 0, at: 0, players: [] as string[], networks: [] as string[] };
+  let worst = { count: 0, at: 0, players: [] as string[], networks: [] as string[], ips: [] as string[] };
   const incidents: number[] = [];
   for (const s of spans) {
-    const active = spans.filter((o) => o.start <= s.start && o.end > s.start);
+    // A device can only be in one place: keep each device's newest play.
+    const newestPerDevice = new Map<string, (typeof spans)[number]>();
+    for (const o of spans) {
+      if (o.start > s.start || o.liveUntil <= s.start) continue;
+      const key = o.play.deviceId ?? `${o.play.ip}|${o.play.player}`;
+      const held = newestPerDevice.get(key);
+      if (!held || o.start > held.start) newestPerDevice.set(key, o);
+    }
+    const active = [...newestPerDevice.values()];
     const networks = new Set(active.map((o) => o.network).filter((n): n is string => Boolean(n)));
     if (networks.size >= lowest(T.concurrentNetworks)) {
       // Count separate incidents at least an hour apart.
@@ -127,6 +151,7 @@ export function detectFlags(
         at: s.start,
         players: [...new Set(active.map((o) => o.play.player).filter((p): p is string => Boolean(p)))],
         networks: [...networks],
+        ips: active.map((o) => o.play.ip).filter((ip): ip is string => Boolean(ip)),
       };
     }
   }
@@ -141,13 +166,23 @@ export function detectFlags(
       details.push(`Most recent peak: ${when(worst.at)}${worst.players.length ? ` on ${worst.players.join(', ')}` : ''}.`);
     }
     if (incidents.length > 1) details.push(`Seen ${plural(incidents.length, 'separate time')} in the last ${windowDays} days.`);
+    // Where those streams were: countries for everyone, towns for admins.
+    const peakIps = liveNow && liveNetworks.size >= worst.count ? live.map((l) => l.ip).filter((ip): ip is string => Boolean(ip)) : worst.ips;
+    const places = peakIps.map((ip) => locate(ip)).filter((l): l is NonNullable<ReturnType<Locate>> => Boolean(l) && l!.country !== 'LAN');
+    const countries = [...new Set(places.map((l) => countryName(l.country)))];
+    const towns = [...new Set(places.map((l) => [l.city, countryName(l.country)].filter(Boolean).join(', ')))];
+    if (countries.length > 1) details.push(`At that moment the streams were in ${countries.length} different countries: ${countries.join(', ')}.`);
+    else if (countries.length === 1) details.push(`All in ${countries[0]}${towns.length > 1 ? `, in ${towns.length} different places` : ''}. Mobile data can make one phone look like it’s on several networks, so check the details.`);
     flags.push({
       kind: 'concurrent_networks',
       severity: concurrentSeverity,
       value: concurrent * 100 + incidents.length,
       headline: `Streamed from ${concurrent} different networks at the same time`,
       details,
-      adminDetails: [`Networks: ${(liveNow && liveNetworks.size >= worst.count ? [...liveNetworks] : worst.networks).join(', ')}`],
+      adminDetails: [
+        `Networks: ${(liveNow && liveNetworks.size >= worst.count ? [...liveNetworks] : worst.networks).join(', ')}`,
+        ...(towns.length ? [`Places: ${towns.join('; ')}`] : []),
+      ],
     });
   }
 
@@ -165,7 +200,14 @@ export function detectFlags(
     });
   }
 
-  const devices = new Set(sorted.map((p) => p.deviceId).filter(Boolean));
+  // Web browsers can get a new device ID whenever cookies are cleared or a private
+  // window is used, so browsers count as whichever is fewer: their IDs, or the
+  // networks they were used on.
+  const isWeb = (p: PlayForDetection) => /web/i.test(p.player ?? '');
+  const appDevices = new Set(sorted.filter((p) => p.deviceId && !isWeb(p)).map((p) => p.deviceId));
+  const web = sorted.filter((p) => p.deviceId && isWeb(p));
+  const webCount = Math.min(new Set(web.map((p) => p.deviceId)).size, new Set(web.map((p) => networkOf(p.ip) ?? p.ip)).size);
+  const devices = { size: appDevices.size + webCount };
   const deviceSeverity = severityFor(devices.size, T.devicesInWindow);
   if (deviceSeverity) {
     const players = [...new Set(sorted.map((p) => p.player).filter(Boolean))];
@@ -326,4 +368,13 @@ function accountFlags(extras: AccountExtras, windowDays: number, T: FlagThreshol
 
 function formatGb(gb: number): string {
   return gb >= 1000 ? `${(gb / 1000).toFixed(1)} TB` : `${Math.round(gb)} GB`;
+}
+
+const COUNTRY_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
+function countryName(code: string): string {
+  try {
+    return COUNTRY_NAMES.of(code) ?? code;
+  } catch {
+    return code;
+  }
 }

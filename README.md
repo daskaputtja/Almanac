@@ -66,7 +66,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - **Adjustable thresholds** (admins, in Settings): turn checks on or off and change their levels, with a live preview of how many accounts would be flagged
 - Shared **notes** and **tags** on any user (for example VIP, Family, Warned), with tags shown next to their name everywhere
 
-Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and all private addresses count as one home network), so phones changing address don't cause flags. Mods see the counts and evidence but never the addresses.
+Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and all private addresses count as one home network), so phones changing address don't cause flags. A device only counts in one place at a time, a stream that timed out stops counting 10 minutes before Silo gave up on it, and web browsers count as one device per network, so a phone switching from Wi-Fi to mobile data or a cleared browser doesn't look like sharing. Flags for streams at the same time say which countries they were in (and which towns, for admins). Mods see the counts and evidence but never the addresses.
 
 ### Yearly recap ✅
 - A "year in review" for each user and for the whole server: hours watched, plays, movies, episodes and active days
