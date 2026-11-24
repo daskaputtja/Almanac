@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 import { useModeration } from '../lib/moderation';
 import { navigate, useLocation } from '../lib/router';
+import { SuspensionQueue } from '../components/Suspensions';
 
 type Status = 'open' | 'reviewed' | 'all';
 const GROUPS: FlagGroup[] = ['sharing', 'nonstop', 'ripping'];
@@ -54,6 +55,8 @@ export function ModerationPage() {
           {data?.checkedAt && <> (last checked {formatWhen(data.checkedAt)})</>}. A flag is a reason to look, not proof.
         </p>
       </div>
+
+      <SuspensionQueue />
 
       <div className="grid gap-3 sm:grid-cols-3">
         {GROUPS.map((g) => (

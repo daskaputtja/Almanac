@@ -9,6 +9,7 @@ import { openDatabase } from '../server/db/database.js';
 import { MetadataService } from '../server/notify/metadata.js';
 import { Notifier } from '../server/notify/notifier.js';
 import { StaffAlerts } from '../server/notify/staff.js';
+import { SuspensionService } from '../server/suspensions/suspensions.js';
 import { AccountsService } from '../server/accounts/accounts.js';
 import { ReliabilityService } from '../server/reliability/reliability.js';
 
@@ -130,6 +131,7 @@ function makeApp() {
       accounts: new AccountsService(db, new MockAccountSource(), () => {}),
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       staff: new StaffAlerts(db, failingFetch, () => {}),
+      suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
     },
   );
   return { app, auth, db, history, monitor };
@@ -392,13 +394,13 @@ describe('roles', () => {
     const { c } = await setUp();
     const state = (await c.get('/api/auth/state')).json!;
     expect(state.role).toBe('admin');
-    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags', 'shareRecaps']);
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags', 'shareRecaps', 'requestSuspension', 'reviewSuspension', 'configureBilling']);
   });
 
   it('tells a mod what they can do', async () => {
     const { mod } = await withMod();
     const state = (await mod.get('/api/auth/state')).json!;
-    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: ['moderate', 'shareRecaps'] });
+    expect(state).toMatchObject({ stage: 'full', role: 'mod', permissions: ['moderate', 'shareRecaps', 'requestSuspension'] });
   });
 
   it('removes IP addresses from live activity for mods', async () => {
@@ -539,6 +541,18 @@ describe('roles', () => {
     const bad = await admin.post('/api/notifications/channels', { name: 'x', webhookUrl: 'https://evil.example/api/webhooks/1/2', libraryIds: ['3'] });
     expect(bad.status).toBe(400);
     expect(bad.json!.error).toMatch(/Discord webhook/);
+  });
+
+  it('lets mods ask for suspensions but only admins approve them or set up the portal', async () => {
+    const { admin, mod } = await withMod();
+    expect((await mod.get('/api/suspensions')).status).toBe(200);
+    expect((await mod.post('/api/suspensions/1/review', { decision: 'approve', note: '' })).status).toBe(403);
+    expect((await mod.get('/api/billing-portal')).status).toBe(403);
+    expect((await mod.post('/api/billing-portal', { url: 'https://evil.example' })).status).toBe(403);
+    const saved = await admin.post('/api/billing-portal', { url: 'https://billing.example/almanac', secret: 'x'.repeat(40) });
+    expect(saved.status).toBe(200);
+    expect(JSON.stringify(saved.json)).not.toContain('x'.repeat(40)); // the secret is never sent back
+    expect(saved.json).toMatchObject({ url: 'https://billing.example/almanac', secretSet: true });
   });
 
   it('keeps account management for admins', async () => {

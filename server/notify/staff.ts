@@ -83,6 +83,17 @@ export class StaffAlerts {
     return this.view();
   }
 
+  /** Almanac's own address (learned when the staff settings were saved), for links. */
+  baseUrl(): string | null {
+    return this.stored().baseUrl;
+  }
+
+  /** Post anything to the staff channel, if there is one. */
+  async post(embed: DiscordEmbed): Promise<void> {
+    if (!this.stored().webhookUrl) return;
+    await this.send(embed);
+  }
+
   /** Is this kind of alert turned on, with somewhere to send it? */
   wants(kind: 'reliability'): boolean {
     const s = this.stored();

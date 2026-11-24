@@ -79,7 +79,8 @@ export interface FlagsResponse {
   flags: ModerationFlag[];
   /** When the checks last ran. */
   checkedAt: string | null;
-  counts: { open: number; openHigh: number };
+  /** pendingSuspensions: suspension requests waiting for an admin (added by the route). */
+  counts: { open: number; openHigh: number; pendingSuspensions?: number };
 }
 
 export interface UserNote {

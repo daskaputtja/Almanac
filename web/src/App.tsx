@@ -86,6 +86,15 @@ function Shell() {
                       {openFlags.open}
                     </span>
                   )}
+                  {item.page === 'moderation' && can('reviewSuspension') && (openFlags.pendingSuspensions ?? 0) > 0 && (
+                    <span
+                      className="ml-1 rounded-full bg-panel-raised px-1.5 py-px text-[11px] font-semibold tabular-nums text-ink"
+                      style={{ boxShadow: 'inset 0 0 0 1px #fab219' }}
+                      title={`${openFlags.pendingSuspensions} suspension requests waiting for you`}
+                    >
+                      {openFlags.pendingSuspensions}
+                    </span>
+                  )}
                 </Link>
               );
             })}

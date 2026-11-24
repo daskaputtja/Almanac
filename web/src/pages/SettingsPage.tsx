@@ -4,6 +4,7 @@ import { RecoveryCodes } from '../auth/AuthScreens';
 import { ROLE_LABELS } from '../../../shared/permissions';
 import { AccountsSection } from '../components/AccountsSection';
 import { ThresholdsSection } from '../components/ThresholdsSection';
+import { BillingPortalSection } from '../components/Suspensions';
 import { ApiError, api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 
@@ -29,6 +30,7 @@ export function SettingsPage() {
       </div>
       {can('manageAccounts') && <AccountsSection onSelfChanged={refresh} />}
       {can('configureFlags') && <ThresholdsSection />}
+      {can('configureBilling') && <BillingPortalSection />}
       <Sessions />
       <RecoverySection left={state.recoveryCodesLeft ?? 0} onChange={refresh} />
       <PasswordSection />

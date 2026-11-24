@@ -19,6 +19,7 @@ import { Notifier } from './notify/notifier.js';
 import { StaffAlerts } from './notify/staff.js';
 import { AccountsService } from './accounts/accounts.js';
 import { ReliabilityService } from './reliability/reliability.js';
+import { SuspensionService } from './suspensions/suspensions.js';
 import { dirname } from 'node:path';
 import { LoadHistory } from './load/load.js';
 import { TranscodeDoctor } from './transcodes/doctor.js';
@@ -133,12 +134,18 @@ accounts.start();
 // How reliably streams play, with an optional alert to a staff Discord channel.
 const staff = new StaffAlerts(db);
 const reliability = new ReliabilityService(db, serverSource, staff);
+// Suspensions go through the billing portal; notes record every step.
+const suspensions = new SuspensionService(db, {
+  note: (userId, actor, text) => moderation.addNote(userId, { id: actor.id, name: actor.name, manageAllNotes: false }, text),
+  tellStaff: (embed) => staff.post(embed),
+  baseUrl: () => staff.baseUrl(),
+});
 moderation.onFlagEvents((events) => {
   staff.flagAlerts(events).catch((err) => console.log(`Flag alert not sent: ${err instanceof Error ? err.message : String(err)}`));
 });
 reliability.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

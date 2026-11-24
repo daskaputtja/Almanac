@@ -197,10 +197,90 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | Edit or delete other people's notes | ✅ | ❌ |
 | Notification settings (Discord and others) | ✅ | ❌ |
 | Add, change and remove accounts | ✅ | ❌ |
+| Ask for an account to be suspended or unsuspended (with a reason) | ✅ | ✅ |
+| Approve or reject suspension requests, and suspend directly | ✅ | ❌ |
+| Connect the billing portal | ✅ | ❌ |
 
 The first account is an admin. Admins manage accounts in **Settings → Accounts**: add an account with a starting password and a role, change roles, reset someone's 2FA or password, or delete an account. Every change needs the admin's own 2FA code. New accounts set up their own 2FA at first sign-in. Almanac won't let you delete or demote the last admin.
 
 For mods, IP addresses are removed on the server before anything is sent, so they can't be found in the page or the API.
+
+## Billing portal (suspending accounts)
+
+Almanac doesn't suspend accounts itself: its Silo key is read-only. Instead it asks your billing portal, which already turns Silo accounts off and on for non-payment.
+
+- A **mod** presses *Suspend until they get in touch* (or *Lift the suspension*) on a user's page and writes a reason. The request waits on the Moderation page for an admin, and the staff Discord channel is told.
+- An **admin** approves it (Almanac sends it to the portal) or rejects it (with a reason). An admin's own requests go straight to the portal.
+- Every step is written to the account's notes: who asked, why, who approved, and what the portal said.
+
+Set it up in **Settings → Billing portal**: the address Almanac should send requests to, and a shared signing secret (*Generate one* makes a strong one; put the same value in your portal). *Send a test* sends a `ping`.
+
+### What your portal receives
+
+`POST` to the address you set, with a JSON body:
+
+```json
+{
+  "event": "suspend",
+  "request_id": 12,
+  "user": { "silo_id": "42", "username": "example-user", "email": "someone@example.com" },
+  "reason": "Over 100 offline downloads in a week, all original quality.",
+  "requested_by": "morgan",
+  "approved_by": "sam",
+  "sent_at": "2026-11-24T11:55:49.077Z"
+}
+```
+
+`event` is `suspend`, `unsuspend` or `ping` (a test, with no `user`). Two headers sign it:
+
+- `X-Almanac-Timestamp`: Unix time in seconds.
+- `X-Almanac-Signature`: `sha256=` followed by the hex HMAC-SHA256 of `timestamp + "." + raw body`, keyed with the shared secret.
+
+Your portal should:
+
+1. **Check the signature** over the raw body, with a constant-time comparison, and reject timestamps more than 5 minutes old. Answer `401` if either fails.
+2. **Find the customer** by `silo_id`, `username` or `email`. Answer `404` with `{"error": "..."}` if there isn't one.
+3. **Do it**: disable or re-enable the Silo account the same way it does for non-payment, and (if you like) show the customer a "please contact us" notice. Treat repeats as success, so suspending someone already suspended is fine.
+4. **Answer `200`** with `{"message": "..."}`. Almanac shows the message to staff and saves it in the notes.
+
+Example check in Node.js (Express):
+
+```js
+import crypto from 'node:crypto';
+import express from 'express';
+
+const app = express();
+app.post('/almanac/suspensions', express.raw({ type: 'application/json' }), (req, res) => {
+  const timestamp = req.get('X-Almanac-Timestamp') ?? '';
+  const expected = 'sha256=' + crypto.createHmac('sha256', process.env.ALMANAC_SECRET).update(`${timestamp}.${req.body}`).digest('hex');
+  const given = req.get('X-Almanac-Signature') ?? '';
+  const fresh = Math.abs(Date.now() / 1000 - Number(timestamp)) < 300;
+  if (!fresh || given.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
+    return res.status(401).json({ error: 'Bad signature' });
+  }
+  const event = JSON.parse(req.body);
+  if (event.event === 'ping') return res.json({ message: 'pong' });
+  // Find the customer by event.user.silo_id / username / email, then suspend or reactivate them.
+  res.json({ message: `Customer ${event.user.email} ${event.event === 'suspend' ? 'suspended' : 'reactivated'}` });
+});
+```
+
+The same check in PHP:
+
+```php
+$body = file_get_contents('php://input');
+$timestamp = $_SERVER['HTTP_X_ALMANAC_TIMESTAMP'] ?? '';
+$expected = 'sha256=' . hash_hmac('sha256', $timestamp . '.' . $body, getenv('ALMANAC_SECRET'));
+$given = $_SERVER['HTTP_X_ALMANAC_SIGNATURE'] ?? '';
+if (abs(time() - (int) $timestamp) > 300 || !hash_equals($expected, $given)) {
+    http_response_code(401);
+    exit(json_encode(['error' => 'Bad signature']));
+}
+$event = json_decode($body, true);
+// ...
+```
+
+Use HTTPS for the portal's address: the request carries the customer's email and the reason.
 
 ## Security
 

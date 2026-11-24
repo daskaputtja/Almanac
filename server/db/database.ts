@@ -334,6 +334,25 @@ const MIGRATIONS: string[] = [
       PRIMARY KEY (user_id, device_id)
     );
   `,
+  /* 17: suspensions through the billing portal: requests, reviews and what happened */ `
+    CREATE TABLE suspension_requests (
+      id             INTEGER PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      username       TEXT NOT NULL,
+      email          TEXT,
+      action         TEXT NOT NULL,             -- suspend or unsuspend
+      reason         TEXT NOT NULL,
+      status         TEXT NOT NULL,             -- pending, rejected, done or failed
+      requested_by   TEXT NOT NULL,
+      requested_at   TEXT NOT NULL,
+      reviewed_by    TEXT,
+      reviewed_at    TEXT,
+      review_note    TEXT,
+      portal_message TEXT
+    );
+    CREATE INDEX suspension_requests_user ON suspension_requests (user_id, requested_at DESC);
+    CREATE INDEX suspension_requests_status ON suspension_requests (status);
+  `,
 ];
 
 export type Database = DatabaseSync;

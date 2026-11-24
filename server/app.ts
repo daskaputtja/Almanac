@@ -28,6 +28,8 @@ import type { GeoService } from './geo/geo.js';
 import type { AccountsService } from './accounts/accounts.js';
 import type { ReliabilityService } from './reliability/reliability.js';
 import type { StaffAlerts } from './notify/staff.js';
+import { SuspensionError, type SuspensionActor, type SuspensionService } from './suspensions/suspensions.js';
+import type { SuspensionStatus } from '../shared/suspensions.js';
 import { RELIABILITY_RANGES, type ReliabilityRange } from '../shared/reliability.js';
 import { MetadataError, type MetadataService } from './notify/metadata.js';
 import { NotifyError, type Notifier } from './notify/notifier.js';
@@ -56,6 +58,7 @@ export interface AppServices {
   accounts: AccountsService;
   reliability: ReliabilityService;
   staff: StaffAlerts;
+  suspensions: SuspensionService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -118,7 +121,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -283,6 +286,7 @@ export function createApp(
   app.onError((err, c) => {
     if (err instanceof ModerationError) return c.json({ error: err.message }, err.status);
     if (err instanceof NotifyError || err instanceof MetadataError) return c.json({ error: err.message }, 400);
+    if (err instanceof SuspensionError) return c.json({ error: err.message }, err.status);
     console.error(err);
     return c.json({ error: 'Something went wrong.' }, 500);
   });
@@ -302,13 +306,12 @@ export function createApp(
 
   app.get('/api/moderation/flags', (c) => {
     const status = c.req.query('status');
-    return c.json(
-      moderation.flags({
-        status: status === 'reviewed' || status === 'all' ? status : status === 'open' ? 'open' : 'all',
-        userId: c.req.query('user') || undefined,
-        includeAdminDetails: seesIps(c),
-      }),
-    );
+    const result = moderation.flags({
+      status: status === 'reviewed' || status === 'all' ? status : status === 'open' ? 'open' : 'all',
+      userId: c.req.query('user') || undefined,
+      includeAdminDetails: seesIps(c),
+    });
+    return c.json({ ...result, counts: { ...result.counts, pendingSuspensions: suspensions.pendingCount() } });
   });
   app.post('/api/moderation/flags/:id/review', async (c) => {
     moderation.review(c.req.param('id'), actor(c), text((await jsonBody(c)).note));
@@ -399,6 +402,54 @@ export function createApp(
       c.get('session').user.username,
     );
     return c.json({ keys });
+  });
+
+  // Suspensions through the billing portal. Mods ask; admins approve. A reason is always required.
+  const suspender = (c: { get: (key: 'session') => AuthEnv['Variables']['session'] }): SuspensionActor => {
+    const { user } = c.get('session');
+    return { id: user.id, name: user.username, role: user.role };
+  };
+  app.get('/api/suspensions', requirePermission('requestSuspension'), (c) => {
+    const status = c.req.query('status');
+    return c.json(
+      suspensions.list({
+        status: ['pending', 'rejected', 'done', 'failed'].includes(status ?? '') ? (status as SuspensionStatus) : undefined,
+        userId: c.req.query('user') || undefined,
+      }),
+    );
+  });
+  app.post('/api/suspensions', requirePermission('requestSuspension'), async (c) => {
+    const body = await jsonBody(c);
+    const action = body.action === 'unsuspend' ? 'unsuspend' : body.action === 'suspend' ? 'suspend' : null;
+    if (!action || typeof body.userId !== 'string') return c.json({ error: 'Say which account and whether to suspend or unsuspend it.' }, 400);
+    return c.json(await suspensions.request(body.userId, action, String(body.reason ?? ''), suspender(c)), 201);
+  });
+  app.post('/api/suspensions/:id/review', requirePermission('reviewSuspension'), async (c) => {
+    const body = await jsonBody(c);
+    const decision = body.decision === 'approve' ? 'approve' : body.decision === 'reject' ? 'reject' : null;
+    if (!decision) return c.json({ error: 'Approve or reject?' }, 400);
+    return c.json(await suspensions.review(Number(c.req.param('id')), decision, String(body.note ?? ''), suspender(c)));
+  });
+  app.post('/api/suspensions/:id/retry', requirePermission('reviewSuspension'), async (c) => c.json(await suspensions.retry(Number(c.req.param('id')), suspender(c))));
+  app.get('/api/billing-portal', requirePermission('configureBilling'), (c) => c.json(suspensions.portal()));
+  app.post('/api/billing-portal', requirePermission('configureBilling'), async (c) => {
+    const body = await jsonBody(c);
+    return c.json(
+      suspensions.configure(
+        {
+          url: body.url === null ? null : typeof body.url === 'string' ? body.url : undefined,
+          secret: body.secret === null ? null : typeof body.secret === 'string' ? body.secret : undefined,
+        },
+        c.get('session').user.username,
+      ),
+    );
+  });
+  app.post('/api/billing-portal/test', requirePermission('configureBilling'), async (c) => {
+    try {
+      return c.json({ ok: true, message: await suspensions.testPortal(c.get('session').user.username) });
+    } catch (err) {
+      return c.json({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));

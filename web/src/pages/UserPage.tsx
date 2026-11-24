@@ -18,6 +18,7 @@ import {
 } from '../components/StatsSections';
 import { NotesAndTags } from '../components/NotesAndTags';
 import { DownloadList } from './DownloadsTab';
+import { SuspensionPanel } from '../components/Suspensions';
 import { WhereSection } from '../components/WhereSection';
 import { TopList } from '../components/TopList';
 import { UserTags } from '../components/UserTags';
@@ -34,6 +35,7 @@ export function UserPage({ userId }: { userId: string }) {
   const [user, setUser] = useState<UserDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [recent, setRecent] = useState<HistoryEntry[] | null>(null);
+  const [notesVersion, setNotesVersion] = useState(0);
   const { data, view, loading } = useStats(period, userId, rankBy);
   const activity = useActivity();
   const { can } = useAuth();
@@ -122,7 +124,8 @@ export function UserPage({ userId }: { userId: string }) {
         <div className="h-16" />
       )}
 
-      {user && can('moderate') && <NotesAndTags userId={user.id} username={user.name} />}
+      {user && can('requestSuspension') && user.inSilo && <SuspensionPanel key={`s-${user.id}`} userId={user.id} username={user.name} enabled={user.enabled} onChanged={() => setNotesVersion((v) => v + 1)} />}
+      {user && can('moderate') && <NotesAndTags key={`n-${user.id}-${notesVersion}`} userId={user.id} username={user.name} />}
 
       {watchingNow.length > 0 && (
         <section>

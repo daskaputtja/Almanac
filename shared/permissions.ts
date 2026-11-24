@@ -14,7 +14,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export const ROLE_DESCRIPTIONS: Record<Role, string> = {
   admin: 'Sees everything and manages accounts.',
-  mod: 'Sees everything except IP addresses, and handles flags, notes and tags. Can’t manage accounts or notifications.',
+  mod: 'Sees everything except IP addresses, handles flags, notes and tags, and can ask for an account to be suspended (an admin approves it). Can’t manage accounts or notifications.',
 };
 
 export type Permission =
@@ -31,7 +31,13 @@ export type Permission =
   /** Change the thresholds the account checks use. */
   | 'configureFlags'
   /** Create and revoke links that show one user's recap without signing in. */
-  | 'shareRecaps';
+  | 'shareRecaps'
+  /** Ask for an account to be suspended or unsuspended (an admin reviews it). */
+  | 'requestSuspension'
+  /** Approve or reject suspension requests, and suspend or unsuspend directly. */
+  | 'reviewSuspension'
+  /** Connect Almanac to the billing portal. */
+  | 'configureBilling';
 
 const GRANTS: Record<Permission, Role[]> = {
   viewIpAddresses: ['admin'],
@@ -41,6 +47,9 @@ const GRANTS: Record<Permission, Role[]> = {
   manageAllNotes: ['admin'],
   configureFlags: ['admin'],
   shareRecaps: ['admin', 'mod'],
+  requestSuspension: ['admin', 'mod'],
+  reviewSuspension: ['admin'],
+  configureBilling: ['admin'],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {
