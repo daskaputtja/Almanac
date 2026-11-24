@@ -100,22 +100,32 @@ describe('detectFlags', () => {
     expect(flag.headline).toMatch(/20\.0 hours/);
   });
 
-  it('flags title after title played to the end without pausing', () => {
-    const chain = Array.from({ length: 22 }, (_, i) => play(i * 1.02, 1, { completed: true }));
+  it('flags hours of titles watched back to back, never as serious', () => {
+    // Twenty-two 45-minute episodes, one after another: about 16.5 hours.
+    const chain = Array.from({ length: 22 }, (_, i) => play(i * 0.77, 0.75, { completed: true }));
     const flag = detectFlags(chain, 7).find((f) => f.kind === 'back_to_back')!;
-    expect(flag.headline).toMatch(/22 titles back to back/);
+    expect(flag.headline).toBe('Watched 17 hours of titles back to back, each to the end');
+    expect(flag.severity).toBe('medium');
+    expect(flag.details[1]).toMatch(/Mostly Show \(22 of 22\)/);
     // With pauses it's normal viewing.
     const paused = chain.map((p) => ({ ...p, pausedSeconds: 300 }));
     expect(kinds(detectFlags(paused, 7))).not.toContain('back_to_back');
   });
 
-  it('calls out movies finished much faster than their running time', () => {
-    // Six two-hour movies, each "finished" in 15 minutes.
-    const movies = Array.from({ length: 6 }, (_, i) => play(i * 0.26, 0.25, { mediaType: 'movie', completed: true, durationSeconds: 7200 }));
-    const flag = detectFlags(movies, 7).find((f) => f.kind === 'back_to_back')!;
-    expect(flag.severity).toBe('high');
-    expect(flag.headline).toMatch(/6 movies back to back, much faster than their running time/);
-    expect(flag.details[0]).toMatch(/\{\{time:/);
+  it('counts hours, not titles, so short cartoons on autoplay don’t look like a hundred films', () => {
+    // A hundred 5-minute episodes: about 8.3 hours, just over the "minor" level.
+    const cartoons = Array.from({ length: 100 }, (_, i) => play(i * (5.5 / 60), 5 / 60, { completed: true, seriesTitle: 'Cartoon' }));
+    const flag = detectFlags(cartoons, 7).find((f) => f.kind === 'back_to_back')!;
+    expect(flag.severity).toBe('low');
+    expect(flag.headline).toMatch(/Watched 8 hours/);
+  });
+
+  it('doesn’t count titles skipped through to the end', () => {
+    // Twelve two-hour movies "finished" in 15 minutes each by jumping to the end.
+    const skipped = Array.from({ length: 12 }, (_, i) =>
+      play(i * 0.26, 0.25, { mediaType: 'movie', completed: true, durationSeconds: 7200, watchedSeconds: 180 }),
+    );
+    expect(kinds(detectFlags(skipped, 7))).not.toContain('back_to_back');
   });
 });
 

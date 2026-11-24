@@ -13,6 +13,8 @@ const CONTINUOUS_GAP_MS = 10 * 60_000;
 const BACK_TO_BACK_GAP_MS = 3 * 60_000;
 /** For back-to-back: a play paused for less than this counts as "no pauses". */
 const MAX_PAUSE_SECONDS = 60;
+/** A play marked finished but watched for less than this share of its length was skipped through. */
+const WATCHED_THROUGH_SHARE = 0.7;
 
 export interface PlayForDetection {
   startedAt: string;
@@ -223,62 +225,51 @@ export function detectFlags(
   }
 
   // --- Back-to-back full plays -----------------------------------------------
-  let chain = { count: 0, movies: 0, start: 0, end: 0, media: 0 };
-  let best = { count: 0, start: 0, end: 0, media: 0 };
-  let bestMovies = { count: 0, start: 0, end: 0, media: 0 };
-  let movieMedia = 0;
-  let movieRunStart = 0;
+  // Title after title watched start to finish, in real time, with hardly any
+  // pausing. Measured in hours of content, so a streak of 5-minute cartoons on
+  // autoplay isn't mistaken for a hundred films. Watching in real time is also
+  // how people binge or fall asleep with the TV on, so on its own this is never
+  // more than worth a look.
+  let streak = { ms: 0, titles: 0, movies: 0, start: 0, end: 0, shows: new Map<string, number>() };
+  let best = { ...streak, shows: new Map<string, number>() };
   let prevEnd: number | null = null;
   for (const s of spans) {
-    const clean = s.play.completed && (s.play.pausedSeconds ?? 0) < MAX_PAUSE_SECONDS;
-    const continues = clean && prevEnd !== null && s.start - prevEnd < BACK_TO_BACK_GAP_MS && chain.count > 0;
-    const media = s.play.durationSeconds ?? 0;
-    if (continues) {
-      chain.count++;
-      chain.end = s.end;
-      chain.media += media;
-      if (s.play.mediaType === 'movie') {
-        if (chain.movies === 0) {
-          movieRunStart = s.start;
-          movieMedia = 0;
-        }
-        chain.movies++;
-        movieMedia += media;
-      } else chain.movies = 0;
+    const p = s.play;
+    // Jumped to the end rather than watched: skipping through, not playing it.
+    const skippedThrough =
+      p.completed && p.durationSeconds && p.watchedSeconds != null && p.watchedSeconds < p.durationSeconds * WATCHED_THROUGH_SHARE;
+    const watchedThrough = p.completed && !skippedThrough && (p.pausedSeconds ?? 0) < MAX_PAUSE_SECONDS;
+    const media = (p.durationSeconds ?? (s.end - s.start) / 1000) * 1000;
+    const label = p.seriesTitle ?? p.title;
+    if (watchedThrough && prevEnd !== null && s.start - prevEnd < BACK_TO_BACK_GAP_MS && streak.titles > 0) {
+      streak.ms += media;
+      streak.titles++;
+      streak.end = s.end;
+      if (p.mediaType === 'movie') streak.movies++;
+      streak.shows.set(label, (streak.shows.get(label) ?? 0) + 1);
+    } else if (watchedThrough) {
+      streak = { ms: media, titles: 1, movies: p.mediaType === 'movie' ? 1 : 0, start: s.start, end: s.end, shows: new Map([[label, 1]]) };
     } else {
-      const isMovie = s.play.mediaType === 'movie';
-      chain = clean ? { count: 1, movies: isMovie ? 1 : 0, start: s.start, end: s.end, media } : { count: 0, movies: 0, start: 0, end: 0, media: 0 };
-      movieRunStart = s.start;
-      movieMedia = isMovie ? media : 0;
+      streak = { ms: 0, titles: 0, movies: 0, start: 0, end: 0, shows: new Map() };
     }
-    if (chain.count > best.count) best = { count: chain.count, start: chain.start, end: chain.end, media: chain.media };
-    if (chain.movies > bestMovies.count) bestMovies = { count: chain.movies, start: movieRunStart, end: s.end, media: movieMedia };
+    if (streak.ms > best.ms) best = { ...streak, shows: new Map(streak.shows) };
     prevEnd = s.end;
   }
-  const chainSeverity = severityFor(best.count, T.backToBack);
-  const movieSeverity = severityFor(bestMovies.count, T.backToBackMovies);
-  if (chainSeverity || movieSeverity) {
-    const useMovies = Boolean(movieSeverity && (!chainSeverity || (movieSeverity === 'high' && chainSeverity !== 'high')));
-    const pick = useMovies ? bestMovies : best;
-    const count = useMovies ? bestMovies.count : best.count;
-    const noun = useMovies ? 'movies' : 'titles';
-    // Finishing titles much faster than their running time means they weren't
-    // being watched: a sign of downloading through the player.
-    const elapsed = (pick.end - pick.start) / 1000;
-    const tooFast = pick.media > 0 && elapsed < pick.media * 0.5;
-    const minutesEach = Math.max(1, Math.round(elapsed / 60 / count));
+  const runHours = best.ms / 3_600_000;
+  const runSeverity = severityFor(runHours, T.backToBackHours);
+  if (runSeverity) {
+    const top = [...best.shows].sort((a, b) => b[1] - a[1]);
+    const mostly = top[0] && top[0][1] / best.titles >= 0.6 ? top[0] : null;
     flags.push({
       kind: 'back_to_back',
-      severity: tooFast || [chainSeverity, movieSeverity].includes('high') ? 'high' : 'medium',
-      value: Math.max(best.count, bestMovies.count * 4),
-      headline: tooFast
-        ? `Finished ${count} ${noun} back to back, much faster than their running time`
-        : `Played ${count} ${noun} back to back, each to the end`,
+      severity: runSeverity,
+      value: Math.round(runHours * 10) / 10,
+      headline: `Watched ${Math.round(runHours)} hours of titles back to back, each to the end`,
       details: [
-        tooFast
-          ? `From ${when(pick.start)} to ${when(pick.end)}: about ${minutesEach} minutes each, though together they run ${Math.round(pick.media / 3600)} hours.`
-          : `From ${when(pick.start)} to ${when(pick.end)}, with under a minute of pausing in each and under 3 minutes between ${noun}.`,
-        ...(useMovies || !bestMovies.count ? [] : [`Longest run of movies: ${bestMovies.count}.`]),
+        `From ${when(best.start)} to ${when(best.end)}: ${plural(best.titles, 'title')}${best.movies ? `, ${plural(best.movies, 'movie')}` : ''}, with under a minute of pausing in each and under 3 minutes between them.`,
+        mostly
+          ? `Mostly ${mostly[0]} (${mostly[1]} of ${best.titles}). Autoplay with the TV left on looks just like this.`
+          : `Including ${top.slice(0, 4).map(([t]) => t).join(', ')}${top.length > 4 ? ` and ${top.length - 4} more` : ''}.`,
       ],
       adminDetails: [],
     });

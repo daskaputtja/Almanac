@@ -11,7 +11,7 @@ export type FlagKind =
   | 'nonstop'
   /** Playing most of every day. */
   | 'heavy_daily'
-  /** Title after title played start to finish with no pauses. */
+  /** Hours of title after title watched start to finish with no pauses. */
   | 'back_to_back'
   /** A lot of offline downloads in a week. */
   | 'heavy_downloads'
@@ -44,7 +44,8 @@ export const GROUP_LABELS: Record<FlagGroup, { title: string; meaning: string }>
   },
   ripping: {
     title: 'Possible ripping',
-    meaning: 'Playing title after title start to finish without pausing, or downloading a lot for offline viewing, is how libraries get copied.',
+    meaning:
+      'Downloading a lot for offline viewing makes full copies. Hours of title after title with no pauses can be screen recording, though it’s also how people binge or fall asleep with the TV on.',
   },
 };
 
@@ -117,8 +118,7 @@ export type ThresholdKey =
   | 'devicesInWindow'
   | 'nonstopHours'
   | 'dailyHours'
-  | 'backToBack'
-  | 'backToBackMovies'
+  | 'backToBackHours'
   | 'devicesRegistered'
   | 'downloadsInWindow'
   | 'downloadGbInWindow';
@@ -136,8 +136,7 @@ export const DEFAULT_THRESHOLDS: FlagThresholds = {
   devicesInWindow: { enabled: true, low: 7, medium: 10 },
   nonstopHours: { enabled: true, medium: 24, high: 48 },
   dailyHours: { enabled: true, medium: 12, high: 18 },
-  backToBack: { enabled: true, medium: 20, high: 40 },
-  backToBackMovies: { enabled: true, medium: 5, high: 8 },
+  backToBackHours: { enabled: true, low: 8, medium: 12 },
   devicesRegistered: { enabled: true, low: 15, medium: 25 },
   downloadsInWindow: { enabled: true, medium: 40, high: 80 },
   downloadGbInWindow: { enabled: true, medium: 200, high: 400 },
@@ -200,23 +199,15 @@ export const THRESHOLD_INFO: Record<ThresholdKey, ThresholdInfo> = {
     min: 2,
     max: 24,
   },
-  backToBack: {
+  backToBackHours: {
     group: 'ripping',
-    label: 'Titles back to back',
-    description: 'Titles played to the end one after another, with under a minute of pausing in each and under 3 minutes between them.',
-    unit: 'titles',
-    levels: ['medium', 'high'],
-    min: 3,
-    max: 500,
-  },
-  backToBackMovies: {
-    group: 'ripping',
-    label: 'Movies back to back',
-    description: 'The same, counting only movies. Finishing them much faster than their running time always counts as serious.',
-    unit: 'movies',
-    levels: ['medium', 'high'],
-    min: 2,
-    max: 100,
+    label: 'Hours back to back',
+    description:
+      'Hours of titles watched start to finish one after another, with under a minute of pausing in each and under 3 minutes between them. Titles skipped to the end don’t count. Never more than “Worth a look” on its own.',
+    unit: 'hours',
+    levels: ['low', 'medium'],
+    min: 1,
+    max: 168,
   },
   devicesRegistered: {
     group: 'sharing',
@@ -295,8 +286,7 @@ export const THRESHOLD_KIND: Record<ThresholdKey, FlagKind> = {
   devicesInWindow: 'many_devices',
   nonstopHours: 'nonstop',
   dailyHours: 'heavy_daily',
-  backToBack: 'back_to_back',
-  backToBackMovies: 'back_to_back',
+  backToBackHours: 'back_to_back',
   devicesRegistered: 'many_registered_devices',
   downloadsInWindow: 'heavy_downloads',
   downloadGbInWindow: 'heavy_downloads',
