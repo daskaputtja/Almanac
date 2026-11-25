@@ -92,6 +92,7 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - Waits a little for Silo to match a new file, so posts have the right title and poster
 - A test button, a log of recent posts, and channels turn themselves off (with a note) if their webhook is deleted
 
+- **Server status:** one message showing each server on an Uptime Kuma status page with a coloured dot and its uptime today (🟢 Emby 1: 100% today), or how long it has been down, edited every 2 minutes. Works behind Cloudflare Access with a service token
 - **Library counts:** one message in a channel of your choice listing every library and how much is in it (with new films and episodes this week), edited every hour so the channel never fills up. Choose which libraries to show
 
 ### Later

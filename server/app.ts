@@ -29,6 +29,7 @@ import type { AccountsService } from './accounts/accounts.js';
 import type { ReliabilityService } from './reliability/reliability.js';
 import type { StaffAlerts } from './notify/staff.js';
 import type { LibraryBoard } from './notify/board.js';
+import type { StatusBoard } from './notify/status.js';
 import { SuspensionError, type SuspensionActor, type SuspensionService } from './suspensions/suspensions.js';
 import type { SuspensionStatus } from '../shared/suspensions.js';
 import { RELIABILITY_RANGES, type ReliabilityRange } from '../shared/reliability.js';
@@ -61,6 +62,7 @@ export interface AppServices {
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
+  statusBoard: StatusBoard;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -123,7 +125,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions, board }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -367,7 +369,26 @@ export function createApp(
     enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
   });
   const optionalText = (value: unknown) => (value === undefined ? undefined : typeof value === 'string' ? value : null);
-  app.get('/api/notifications', notifications, (c) => c.json({ ...notifier.overview(), staff: staff.view(), board: board.view() }));
+  app.get('/api/notifications', notifications, (c) => c.json({ ...notifier.overview(), staff: staff.view(), board: board.view(), status: statusBoard.view() }));
+  app.post('/api/notifications/status', notifications, async (c) => {
+    const body = await jsonBody(c);
+    const text = (value: unknown) => (value === null ? null : typeof value === 'string' ? value : undefined);
+    return c.json(
+      await statusBoard.configure(
+        {
+          pageUrl: text(body.pageUrl),
+          webhookUrl: text(body.webhookUrl),
+          accessClientId: text(body.accessClientId),
+          accessClientSecret: text(body.accessClientSecret),
+        },
+        c.get('session').user.username,
+      ),
+    );
+  });
+  app.post('/api/notifications/status/refresh', notifications, async (c) => {
+    await statusBoard.update(true);
+    return c.json(statusBoard.view());
+  });
   app.post('/api/notifications/board', notifications, async (c) => {
     const body = await jsonBody(c);
     return c.json(

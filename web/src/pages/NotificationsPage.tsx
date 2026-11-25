@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   DISCORD_WEBHOOK_PATTERN,
+  type StatusBoardMonitor,
   type NotificationsResponse,
   type NotifyChannel,
   type NotifyLogEntry,
@@ -54,6 +55,7 @@ export function NotificationsPage() {
         <>
           <ChannelsCard channels={data.channels} libraries={data.libraries} onChange={load} />
           {data.board && <BoardCard board={data.board} libraries={data.libraries} onChange={load} />}
+          {data.status && <StatusCard status={data.status} onChange={load} />}
           <KeysCard keys={data.keys} onChange={load} />
           {data.staff && <StaffCard staff={data.staff} onChange={load} />}
           <LogCard log={data.log} />
@@ -598,6 +600,129 @@ function BoardCard({ board, libraries, onChange }: { board: NonNullable<Notifica
         )}
       </div>
       {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+    </section>
+  );
+}
+
+// --- Server status (Uptime Kuma) ------------------------------------------------------
+
+const STATE_DOT: Record<StatusBoardMonitor['state'], string> = { up: '🟢', down: '🔴', pending: '🟡', maintenance: '🔧', unknown: '⚪' };
+
+function StatusCard({ status, onChange }: { status: NonNullable<NotificationsResponse['status']>; onChange: () => void }) {
+  const [pageUrl, setPageUrl] = useState(status.pageUrl ?? '');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [showToken, setShowToken] = useState(status.accessTokenSet);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const problem = webhookUrl.trim() && !DISCORD_WEBHOOK_PATTERN.test(webhookUrl.trim()) ? 'That doesn’t look like a Discord webhook address.' : null;
+
+  const act = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fn();
+      setMessage({ ok: true, text: done });
+      setWebhookUrl('');
+      setClientId('');
+      setClientSecret('');
+      onChange();
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Something went wrong.' });
+      onChange();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (problem) return;
+    const body: Record<string, string> = { pageUrl: pageUrl.trim() };
+    if (webhookUrl.trim()) body.webhookUrl = webhookUrl.trim();
+    if (clientId.trim()) body.accessClientId = clientId.trim();
+    if (clientSecret.trim()) body.accessClientSecret = clientSecret.trim();
+    void act(() => api('/api/notifications/status', { method: 'POST', body }), status.webhookHint || webhookUrl.trim() ? 'Saved and posted.' : 'Saved. Add a webhook to post it to Discord.');
+  };
+
+  return (
+    <section className="rounded-xl border border-line bg-panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Server status → Discord</h2>
+        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <StatusIcon status={status.lastError ? 'failed' : status.lastUpdatedAt ? 'sent' : 'skipped'} />
+          {status.lastError ? 'Not updating' : status.lastUpdatedAt ? `Checked ${formatWhen(status.lastUpdatedAt)}` : 'Not set up'}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-ink-muted">
+        Shows each server on your Uptime Kuma status page with a coloured dot and its uptime today, in one Discord message that Almanac edits every
+        2 minutes.
+      </p>
+      {status.lastError && <p className="mt-2 text-sm text-red-200">{status.lastError}</p>}
+
+      <form onSubmit={save} className="mt-4 space-y-3">
+        <label className="block text-sm">
+          <span className="font-medium">Status page address</span>
+          <input type="url" value={pageUrl} onChange={(e) => setPageUrl(e.target.value)} placeholder="https://uptime.example.com/status/main" className={`${input} mt-1 w-full`} />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">Discord webhook</span>
+          <input
+            type="password"
+            autoComplete="off"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+            placeholder={status.webhookHint ? `Posting to ${status.webhookHint}. Paste a new webhook to move it` : 'https://discord.com/api/webhooks/…'}
+            className={`${input} mt-1 w-full`}
+          />
+          {problem && <span className="mt-1 block text-xs text-red-200">{problem}</span>}
+        </label>
+        {showToken ? (
+          <div className="space-y-2 rounded-lg border border-line bg-canvas/40 p-3 text-sm">
+            <p className="font-medium">
+              Cloudflare Access service token <span className="font-normal text-ink-muted">{status.accessTokenSet ? '(saved; fill both to replace it)' : ''}</span>
+            </p>
+            <p className="text-xs text-ink-faint">Only needed if the status page is behind a Cloudflare Access login.</p>
+            <input autoComplete="off" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder="Client ID (ends in .access)" className={`${input} w-full font-mono`} />
+            <input type="password" autoComplete="off" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder="Client secret" className={`${input} w-full font-mono`} />
+          </div>
+        ) : (
+          <button type="button" className="text-sm text-accent hover:underline" onClick={() => setShowToken(true)}>
+            Behind Cloudflare Access? Add a service token
+          </button>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" disabled={busy || !pageUrl.trim() || Boolean(problem)} className={primary}>
+            {busy ? 'Checking…' : 'Save'}
+          </button>
+          {status.pageUrl && (
+            <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/status/refresh', { method: 'POST' }), 'Updated.')}>
+              Check now
+            </button>
+          )}
+          {status.webhookHint && (
+            <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/status', { method: 'POST', body: { webhookUrl: null } }), 'Removed. Delete the old message in Discord if you like.')}>
+              Remove from Discord
+            </button>
+          )}
+        </div>
+        {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+      </form>
+
+      {status.monitors.length > 0 && (
+        <ul className="mt-4 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          {status.monitors.map((m) => (
+            <li key={`${m.group}:${m.name}`} className="flex items-center gap-2">
+              <span aria-hidden="true">{STATE_DOT[m.state]}</span>
+              <span className="font-medium">{m.name}</span>
+              <span className="text-ink-muted">
+                {m.state === 'up' ? (m.uptimeToday == null ? 'up' : `${m.uptimeToday >= 0.99995 ? '100' : (Math.floor(m.uptimeToday * 10000) / 100).toFixed(2)}% today`) : m.state}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

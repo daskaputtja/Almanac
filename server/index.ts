@@ -18,6 +18,7 @@ import { MetadataService } from './notify/metadata.js';
 import { Notifier } from './notify/notifier.js';
 import { StaffAlerts } from './notify/staff.js';
 import { LibraryBoard } from './notify/board.js';
+import { StatusBoard } from './notify/status.js';
 import { AccountsService } from './accounts/accounts.js';
 import { ReliabilityService } from './reliability/reliability.js';
 import { SuspensionService } from './suspensions/suspensions.js';
@@ -138,6 +139,9 @@ const reliability = new ReliabilityService(db, serverSource, staff);
 // A Discord message listing every library and how much is in it, edited hourly.
 const board = new LibraryBoard(db, library);
 board.start();
+// Server status from an Uptime Kuma status page, as a Discord message.
+const statusBoard = new StatusBoard(db);
+statusBoard.start();
 
 // Suspensions go through the billing portal; notes record every step.
 const suspensions = new SuspensionService(db, {
@@ -150,7 +154,7 @@ moderation.onFlagEvents((events) => {
 });
 reliability.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions, board });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -174,6 +178,7 @@ function shutdown() {
   notifier.stop();
   accounts.stop();
   board.stop();
+  statusBoard.stop();
   reliability.stop();
   server.close(() => {
     db.close();

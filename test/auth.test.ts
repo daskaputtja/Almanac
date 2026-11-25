@@ -11,6 +11,7 @@ import { Notifier } from '../server/notify/notifier.js';
 import { StaffAlerts } from '../server/notify/staff.js';
 import { SuspensionService } from '../server/suspensions/suspensions.js';
 import { LibraryBoard } from '../server/notify/board.js';
+import { StatusBoard } from '../server/notify/status.js';
 import { AccountsService } from '../server/accounts/accounts.js';
 import { ReliabilityService } from '../server/reliability/reliability.js';
 
@@ -134,6 +135,7 @@ function makeApp() {
       staff: new StaffAlerts(db, failingFetch, () => {}),
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
       board: new LibraryBoard(db, new LibraryService(db, catalogSync), failingFetch, () => {}),
+      statusBoard: new StatusBoard(db, failingFetch, () => {}),
     },
   );
   return { app, auth, db, history, monitor };

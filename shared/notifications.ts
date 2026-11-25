@@ -62,6 +62,27 @@ export interface NotificationsResponse {
   /** Added by the route. */
   staff?: StaffAlertsSettings;
   board?: LibraryBoardSettings;
+  status?: StatusBoardSettings;
+}
+
+/** One server from the Uptime Kuma status page. */
+export interface StatusBoardMonitor {
+  name: string;
+  group: string | null;
+  state: 'up' | 'down' | 'pending' | 'maintenance' | 'unknown';
+  /** Share of checks up over the last 24 hours (0 to 1). */
+  uptimeToday: number | null;
+  downSince: string | null;
+}
+
+/** A Discord message showing each server's status from Uptime Kuma, edited every couple of minutes. */
+export interface StatusBoardSettings {
+  pageUrl: string | null;
+  accessTokenSet: boolean;
+  webhookHint: string | null;
+  lastUpdatedAt: string | null;
+  lastError: string | null;
+  monitors: StatusBoardMonitor[];
 }
 
 /** A Discord message listing every library and how much is in it, edited hourly. */
