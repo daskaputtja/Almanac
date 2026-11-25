@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadConfig } from '../server/config.js';
+import { loadConfig, unquote } from '../server/config.js';
 
 describe('loadConfig', () => {
   it('requires a Silo URL and key unless mocking', () => {
@@ -26,5 +26,20 @@ describe('loadConfig', () => {
       username: 'admin',
       password: 'pw',
     });
+  });
+});
+
+describe('unquote', () => {
+  it('strips matching quotes and spaces pasted around a value', () => {
+    expect(unquote('"sa_abc"')).toBe('sa_abc');
+    expect(unquote("'sa_abc'")).toBe('sa_abc');
+    expect(unquote('  sa_abc  ')).toBe('sa_abc');
+    expect(unquote(' " sa_abc " ')).toBe('sa_abc');
+  });
+
+  it('leaves unmatched or inner quotes alone', () => {
+    expect(unquote('"sa_abc')).toBe('"sa_abc');
+    expect(unquote('sa_"abc"')).toBe('sa_"abc"');
+    expect(unquote('"')).toBe('"');
   });
 });

@@ -108,6 +108,12 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
       } catch {
         // Not a problem+json body; keep the status text.
       }
+      if (res.status === 401) {
+        throw new SiloError(
+          `Silo doesn’t accept the API key (${detail}). Check SILO_API_KEY is the whole key from Silo’s API keys page, starting sa_, with no quotes or spaces, that it hasn’t been deleted or expired, and that it belongs to the Silo at ${this.baseUrl}.`,
+          401,
+        );
+      }
       throw new SiloError(`Silo returned ${res.status} for ${path}: ${detail}`, res.status);
     }
 

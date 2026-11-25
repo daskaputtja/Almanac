@@ -19,6 +19,16 @@ export interface Config {
   webRoot: string;
 }
 
+/**
+ * Drop spaces and one pair of surrounding quotes. In a Docker Compose list,
+ * `- SILO_API_KEY="sa_…"` makes the quotes part of the value, and Silo then
+ * rejects the key.
+ */
+export function unquote(value: string): string {
+  const v = value.trim();
+  return /^(['"]).*\1$/.test(v) && v.length >= 2 ? v.slice(1, -1).trim() : v;
+}
+
 function bool(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
 }
@@ -28,8 +38,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const problems: string[] = [];
   const mock = bool(env.SILO_MOCK);
 
-  const siloUrl = (env.SILO_URL ?? '').trim();
-  const siloApiKey = (env.SILO_API_KEY ?? '').trim();
+  const siloUrl = unquote(env.SILO_URL ?? '');
+  const siloApiKey = unquote(env.SILO_API_KEY ?? '');
   if (!mock) {
     if (!siloUrl) problems.push('SILO_URL is not set (for example https://silo.example.com).');
     else if (!/^https?:\/\//i.test(siloUrl)) problems.push('SILO_URL must start with http:// or https://.');
