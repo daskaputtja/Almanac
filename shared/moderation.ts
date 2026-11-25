@@ -228,7 +228,7 @@ export const THRESHOLD_INFO: Record<ThresholdKey, ThresholdInfo> = {
     group: 'sharing',
     label: 'Days with impossible travel',
     description:
-      'Days in the week when two different devices played over 500 km apart, closer together in time than anyone could travel (including at the same moment). A VPN can cause it once in a while; it happening day after day usually means two households.',
+      'Days in the week when two different devices played over 300 miles apart, closer together in time than anyone could travel (including at the same moment). A VPN can cause it once in a while; it happening day after day usually means two households.',
     unit: 'days',
     levels: ['low', 'medium'],
     min: 1,

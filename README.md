@@ -57,7 +57,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 
 ### Moderation ✅
 - **Account flags**, checked every 5 minutes over the last 7 days:
-  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, 15 or more devices signed in to the account and used in the last 30 days, or *impossible travel* on 4 or more days in a week (two different devices playing over 500 km apart, closer together in time than anyone could travel)
+  - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, 15 or more devices signed in to the account and used in the last 30 days, or *impossible travel* on 4 or more days in a week (two different devices playing over 300 miles apart, closer together in time than anyone could travel)
   - *Non-stop playback* (restreaming, or a TV left on): 24 hours or more without a break, or 12 or more hours a day on average
   - *Possible ripping:* 40 or more offline downloads (or 200 GB or more) in a week; or 8 or more hours of titles watched to the end back to back with no pauses (never more than "worth a look" on its own, since autoplay with the TV left on looks the same). Titles skipped through to the end don't count
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened

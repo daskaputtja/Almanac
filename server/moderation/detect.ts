@@ -11,7 +11,8 @@ export const THRESHOLDS = DEFAULT_THRESHOLDS;
 const CONTINUOUS_GAP_MS = 10 * 60_000;
 /** For back-to-back: the next title started within this long of the last ending. */
 const BACK_TO_BACK_GAP_MS = 3 * 60_000;
-/** Impossible travel: at least this far apart… */
+const MILES_PER_KM = 0.621371;
+/** Impossible travel: at least this far apart (about 300 miles)… */
 const TRAVEL_MIN_KM = 500;
 /** …and faster than a plane would need to go… */
 const TRAVEL_MAX_KMH = 900;
@@ -227,7 +228,7 @@ export function detectFlags(
     const latest = trips[trips.length - 1]!;
     const atOnce = trips.filter((t) => t.gapMs === 0).length;
     const describe = (t: Trip, from: string, to: string) => {
-      const km = `${Math.round(t.km).toLocaleString('en')} km apart`;
+      const km = `${Math.round(t.km * MILES_PER_KM).toLocaleString('en')} miles apart`;
       if (from === to) return t.gapMs === 0 ? `two places in ${from} at the same time, ${km}` : `two places in ${from} ${formatGap(t.gapMs)} apart, ${km}`;
       return t.gapMs === 0 ? `${from} and ${to} at the same time, ${km}` : `${from}, then ${to} ${formatGap(t.gapMs)} later, ${km}`;
     };

@@ -110,6 +110,7 @@ describe('detectFlags', () => {
     expect(flag.severity).toBe('low');
     expect(flag.headline).toBe('Played in places too far apart to travel between, on 5 days this week');
     expect(flag.details[0]).toContain('Canada, then Ireland 1 h 0 min later');
+    expect(flag.details[0]).toMatch(/\d,\d{3} miles apart/);
     expect(flag.details.join(' ')).not.toContain('Montreal'); // towns are for admins
     expect(flag.adminDetails[0]).toContain('Montreal, Canada, then Cork, Ireland');
 
