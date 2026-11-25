@@ -19,10 +19,12 @@ You need [Node.js 22](https://nodejs.org) on the Mac and the **Expo Go** app on 
 ```bash
 cd mobile
 npm install
-npx expo start
+npx expo start --go
 ```
 
-Scan the QR code with your phone's camera (iPhone) or Expo Go (Android). Everything works in Expo Go except **push notifications**, which need a development build (below).
+Scan the QR code with your phone's camera (iPhone) or Expo Go (Android). Everything works in Expo Go except **push notifications**, which need a development build (below). Without `--go`, Expo makes a QR code for the development build instead, which only works once that's installed (press `s` to switch).
+
+Ignore npm's "vulnerabilities" notices and don't run `npm audit fix --force`: it can install versions that don't match the Expo SDK.
 
 ## Set up building (once)
 
@@ -41,7 +43,7 @@ Scan the QR code with your phone's camera (iPhone) or Expo Go (Android). Everyth
 npx eas-cli@latest build --profile development --platform ios      # or android
 ```
 
-Install the build on your phone from the link EAS gives you, run `npx expo start`, and open the app. In **More → Notifications**, turn them on and send a test.
+Install the build on your phone from the link EAS gives you, run `npx expo start` (without `--go`), and open the app. In **More → Notifications**, turn them on and send a test.
 
 (With Xcode on the Mac you can also build locally with `npx expo run:ios --device`.)
 
