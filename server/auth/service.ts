@@ -46,6 +46,8 @@ export interface SessionInfo {
   lastSeenAt: string;
   ip: string | null;
   userAgent: string | null;
+  /** Signed in from the phone app rather than a browser. */
+  app: boolean;
 }
 
 export interface ClientInfo {
@@ -68,6 +70,12 @@ const PENDING_MS = 10 * 60 * 1000;
 const SESSION_MAX_MS = 30 * 86_400_000;
 /** …and ends sooner if unused for this long. */
 const SESSION_IDLE_MS = 7 * 86_400_000;
+/** The phone app stays signed in longer: phones are personal and have their own lock screen. */
+const APP_SESSION_MAX_MS = 180 * 86_400_000;
+const APP_SESSION_IDLE_MS = 30 * 86_400_000;
+
+/** Where a sign-in came from: the website (cookie) or the phone app (header). */
+export type ClientKind = 'web' | 'app';
 /** Wrong 2FA codes allowed on one pending sign-in before the password is needed again. */
 const MAX_CODE_FAILURES = 5;
 const RECOVERY_CODE_COUNT = 10;
@@ -93,6 +101,7 @@ interface SessionRow {
   created_at: string;
   last_seen_at: string;
   expires_at: string;
+  client_kind: ClientKind;
 }
 
 export class AuthService {
@@ -138,12 +147,12 @@ export class AuthService {
   }
 
   /** Check a username and password. Returns a pending session and what comes next. */
-  async login(username: string, password: string, client: ClientInfo): Promise<{ token: string; stage: SessionStage }> {
+  async login(username: string, password: string, client: ClientInfo, kind: ClientKind = 'web'): Promise<{ token: string; stage: SessionStage }> {
     const user = this.findUser(username.trim());
     const ok = await verifyPassword(password, user?.password_hash ?? (await dummyPasswordHash()));
     if (!user || !ok) throw new AuthError('Wrong username or password.', 401);
     const stage: SessionStage = user.totp_enabled ? 'totp' : 'enroll';
-    return { token: this.createSession(user.id, stage, client), stage };
+    return { token: this.createSession(user.id, stage, client, kind), stage };
   }
 
   /** Look up a session from its cookie token. Expired sessions are deleted. */
@@ -154,7 +163,8 @@ export class AuthService {
     if (!row) return null;
 
     const now = Date.now();
-    const idle = row.stage === 'full' && now - Date.parse(row.last_seen_at) > SESSION_IDLE_MS;
+    const idleLimit = row.client_kind === 'app' ? APP_SESSION_IDLE_MS : SESSION_IDLE_MS;
+    const idle = row.stage === 'full' && now - Date.parse(row.last_seen_at) > idleLimit;
     if (now > Date.parse(row.expires_at) || idle) {
       this.db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').run(hash);
       return null;
@@ -246,6 +256,7 @@ export class AuthService {
       lastSeenAt: r.last_seen_at,
       ip: r.ip,
       userAgent: r.user_agent,
+      app: r.client_kind === 'app',
     }));
   }
 
@@ -395,16 +406,17 @@ export class AuthService {
     return this.db.prepare('SELECT * FROM auth_users WHERE username = ?').get(username) as UserRow | undefined;
   }
 
-  private createSession(userId: number, stage: SessionStage, client: ClientInfo): string {
+  private createSession(userId: number, stage: SessionStage, client: ClientInfo, kind: ClientKind = 'web'): string {
     const token = randomToken();
     const now = new Date();
-    const expires = new Date(now.getTime() + (stage === 'full' ? SESSION_MAX_MS : PENDING_MS));
+    const full = kind === 'app' ? APP_SESSION_MAX_MS : SESSION_MAX_MS;
+    const expires = new Date(now.getTime() + (stage === 'full' ? full : PENDING_MS));
     this.db
       .prepare(
-        `INSERT INTO auth_sessions (token_hash, public_id, user_id, stage, created_at, last_seen_at, expires_at, ip, user_agent)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO auth_sessions (token_hash, public_id, user_id, stage, created_at, last_seen_at, expires_at, ip, user_agent, client_kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(sha256(token), randomBytes(9).toString('base64url'), userId, stage, now.toISOString(), now.toISOString(), expires.toISOString(), client.ip, client.userAgent?.slice(0, 300) ?? null);
+      .run(sha256(token), randomBytes(9).toString('base64url'), userId, stage, now.toISOString(), now.toISOString(), expires.toISOString(), client.ip, client.userAgent?.slice(0, 300) ?? null, kind);
     // Tidy up: drop expired sessions now and then.
     this.db.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').run(now.toISOString());
     return token;
@@ -412,8 +424,10 @@ export class AuthService {
 
   /** Replace a pending session with a full one under a new token. */
   private upgrade(token: string, userId: number, client: ClientInfo): string {
+    // An app sign-in stays an app sign-in once the 2FA code is checked.
+    const pending = this.db.prepare('SELECT client_kind FROM auth_sessions WHERE token_hash = ?').get(sha256(token)) as { client_kind: ClientKind } | undefined;
     this.db.prepare('DELETE FROM auth_sessions WHERE token_hash = ?').run(sha256(token));
-    return this.createSession(userId, 'full', client);
+    return this.createSession(userId, 'full', client, pending?.client_kind ?? 'web');
   }
 
   private requireStage(token: string, stage: SessionStage): Session {

@@ -19,6 +19,7 @@ import { Notifier } from './notify/notifier.js';
 import { StaffAlerts } from './notify/staff.js';
 import { LibraryBoard } from './notify/board.js';
 import { StatusBoard } from './notify/status.js';
+import { PushService } from './push/push.js';
 import { AccountsService } from './accounts/accounts.js';
 import { ReliabilityService } from './reliability/reliability.js';
 import { SuspensionService } from './suspensions/suspensions.js';
@@ -143,18 +144,31 @@ board.start();
 const statusBoard = new StatusBoard(db);
 statusBoard.start();
 
+// Push notifications to the phone app, through Expo.
+const push = new PushService(db, fetch, console.log, process.env.EXPO_ACCESS_TOKEN?.trim() || null);
+const quietly = (p: Promise<unknown>) => void p.catch((err) => console.log(`Push notification not sent: ${err instanceof Error ? err.message : String(err)}`));
+reliability.onAlert = (message) => quietly(push.serverAlert(message));
+statusBoard.onChange = (changes) => {
+  for (const m of changes) {
+    quietly(push.serverAlert({ title: m.state === 'down' ? `${m.name} is down` : `${m.name} is back up`, body: m.state === 'down' ? 'Uptime Kuma says it isn’t answering.' : 'Uptime Kuma says it’s answering again.', path: '/server' }));
+  }
+};
+
 // Suspensions go through the billing portal; notes record every step.
 const suspensions = new SuspensionService(db, {
+  onPending: (r) => quietly(push.suspensionRequested(r)),
+  onDecided: (r) => quietly(push.suspensionDecided(r)),
   note: (userId, actor, text) => moderation.addNote(userId, { id: actor.id, name: actor.name, manageAllNotes: false }, text),
   tellStaff: (embed) => staff.post(embed),
   baseUrl: () => staff.baseUrl(),
 });
 moderation.onFlagEvents((events) => {
   staff.flagAlerts(events).catch((err) => console.log(`Flag alert not sent: ${err instanceof Error ? err.message : String(err)}`));
+  quietly(push.flagEvents(events));
 });
 reliability.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard, push });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

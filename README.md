@@ -176,6 +176,7 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | `SILO_API_KEY` | Yes | | The API key from step 1 |
 | `TRUST_PROXY` | No | `false` | Set to `true` behind a reverse proxy, so Almanac sees visitors' real IP addresses and HTTPS |
 | `GEOLOCATION` | No | `on` | Set to `off` to turn off the viewer map. When on, Almanac downloads DB-IP's free city database (about 130 MB) once a month |
+| `EXPO_ACCESS_TOKEN` | No | | Only if "enhanced push security" is turned on for the Almanac phone app in Expo: the access token push notifications are sent with |
 | `SECURE_COOKIES` | No | `auto` | `auto` marks the sign-in cookie HTTPS-only when the request came over HTTPS; or `always` / `never` |
 | `ALMANAC_USERNAME` | No | | Creates the first account on startup instead of using the setup page. You still set up 2FA at first sign-in |
 | `ALMANAC_PASSWORD` | No | | The password for that account |
@@ -284,6 +285,14 @@ $event = json_decode($body, true);
 ```
 
 Use HTTPS for the portal's address: the request carries the customer's email and the reason.
+
+## Phone app (in progress)
+
+Native iPhone and Android apps are being built with React Native in `mobile/`. The server side is ready:
+
+- **Sign-in:** the app sends `X-Almanac-Client: app` and gets its token in the reply (`token`) instead of a cookie, then sends `Authorization: Bearer <token>`. The same password and 2FA steps apply. App sign-ins last up to 180 days (30 without use) and show as "Almanac app" in **Settings → Signed-in devices**, where they can be signed out.
+- **Checking an address:** `GET /api/app/info` (no sign-in) says it's an Almanac and which Silo it watches.
+- **Push notifications:** `POST /api/app/push` registers the phone's Expo push token; `/api/app/push/preferences` sets what it wants (account flags at a chosen severity, suspension requests and outcomes, server alerts, and whether to include names). Almanac sends through Expo's push service, so the server holds no Apple or Google keys. Phones that uninstall the app or are signed out stop receiving notifications.
 
 ## Security
 

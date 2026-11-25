@@ -50,6 +50,23 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
     return { ip, userAgent: c.req.header('user-agent') ?? null };
   };
 
+  /**
+   * The phone app sends its sign-in as "Authorization: Bearer <token>" and says
+   * so with "X-Almanac-Client: app"; the website uses the cookie.
+   */
+  const bearer = (c: Context) => {
+    const header = c.req.header('authorization') ?? '';
+    return header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() || undefined : undefined;
+  };
+  const tokenOf = (c: Context) => getCookie(c, SESSION_COOKIE) ?? bearer(c);
+  const isApp = (c: Context) => c.req.header('x-almanac-client') === 'app';
+  /** Hand the app its token in the reply (it can't read the cookie); the website gets the cookie. */
+  const issue = (c: Context, token: string, full: boolean) => {
+    if (isApp(c)) return { token };
+    setSessionCookie(c, token, full);
+    return {};
+  };
+
   const isHttps = (c: Context) => {
     if (options.secureCookies === 'always') return true;
     if (options.secureCookies === 'never') return false;
@@ -97,7 +114,11 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
    */
   const csrf: MiddlewareHandler = async (c, next) => {
     if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return next();
-    if (c.req.header(CSRF_HEADER) !== '1') return c.json({ error: 'Missing request header.' }, 403);
+    // The app's token travels in a header that another website can't make a browser
+    // send, so cross-site forgery doesn't apply to it.
+    if (bearer(c) && !getCookie(c, SESSION_COOKIE)) return next();
+    // Either custom header works: a browser won't send one to another site without asking it first.
+    if (c.req.header(CSRF_HEADER) !== '1' && !isApp(c)) return c.json({ error: 'Missing request header.' }, 403);
     const origin = c.req.header('origin');
     if (origin) {
       const host = (options.trustProxy && c.req.header('x-forwarded-host')) || c.req.header('host');
@@ -112,7 +133,7 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
 
   /** Every API route except health and sign-in needs a full session. */
   const requireSession: MiddlewareHandler<Env> = async (c, next) => {
-    const token = getCookie(c, SESSION_COOKIE);
+    const token = tokenOf(c);
     const session = auth.getSession(token);
     if (!session || session.stage !== 'full') return c.json({ error: 'Sign in required.' }, 401);
     c.set('session', session);
@@ -129,7 +150,7 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
   });
 
   routes.get('/state', (c) => {
-    const session = auth.getSession(getCookie(c, SESSION_COOKIE));
+    const session = auth.getSession(tokenOf(c));
     return c.json({
       setupRequired: !auth.hasUsers(),
       stage: session?.stage ?? null,
@@ -157,9 +178,8 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
     const { username, password } = await body<{ username: string; password: string }>(c);
     checkLimits(c, str(username));
     try {
-      const { token, stage } = await auth.login(str(username), str(password), client(c));
-      setSessionCookie(c, token, false);
-      return c.json({ next: stage });
+      const { token, stage } = await auth.login(str(username), str(password), client(c), isApp(c) ? 'app' : 'web');
+      return c.json({ next: stage, ...issue(c, token, false) });
     } catch (err) {
       if (err instanceof AuthError && err.status === 401) recordFailure(c, str(username));
       throw err;
@@ -167,7 +187,7 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
   });
 
   routes.get('/enroll', async (c) => {
-    const token = getCookie(c, SESSION_COOKIE) ?? '';
+    const token = tokenOf(c) ?? '';
     const secret = auth.enrollmentSecret(token);
     const session = auth.getSession(token)!;
     const url = otpauthUrl(secret, session.user.username);
@@ -180,10 +200,9 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
     checkLimits(c);
     const { code } = await body<{ code: string }>(c);
     try {
-      const result = auth.confirmEnrollment(getCookie(c, SESSION_COOKIE) ?? '', str(code), client(c));
-      setSessionCookie(c, result.token, true);
+      const result = auth.confirmEnrollment(tokenOf(c) ?? '', str(code), client(c));
       c.header('Cache-Control', 'no-store');
-      return c.json({ recoveryCodes: result.recoveryCodes });
+      return c.json({ recoveryCodes: result.recoveryCodes, ...issue(c, result.token, true) });
     } catch (err) {
       if (err instanceof AuthError && err.status === 401) recordFailure(c);
       throw err;
@@ -194,9 +213,8 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
     checkLimits(c);
     const { code, recoveryCode } = await body<{ code: string; recoveryCode: string }>(c);
     try {
-      const result = auth.verifySecondFactor(getCookie(c, SESSION_COOKIE) ?? '', { code: str(code), recoveryCode: str(recoveryCode) }, client(c));
-      setSessionCookie(c, result.token, true);
-      return c.json({ ok: true, usedRecoveryCode: result.usedRecoveryCode });
+      const result = auth.verifySecondFactor(tokenOf(c) ?? '', { code: str(code), recoveryCode: str(recoveryCode) }, client(c));
+      return c.json({ ok: true, usedRecoveryCode: result.usedRecoveryCode, ...issue(c, result.token, true) });
     } catch (err) {
       if (err instanceof AuthError && err.status === 401) recordFailure(c);
       throw err;
@@ -204,7 +222,7 @@ export function createAuth(auth: AuthService, options: AuthOptions) {
   });
 
   routes.post('/logout', (c) => {
-    auth.logout(getCookie(c, SESSION_COOKIE));
+    auth.logout(tokenOf(c));
     deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return c.json({ ok: true });
   });

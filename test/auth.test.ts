@@ -12,6 +12,7 @@ import { StaffAlerts } from '../server/notify/staff.js';
 import { SuspensionService } from '../server/suspensions/suspensions.js';
 import { LibraryBoard } from '../server/notify/board.js';
 import { StatusBoard } from '../server/notify/status.js';
+import { PushService } from '../server/push/push.js';
 import { AccountsService } from '../server/accounts/accounts.js';
 import { ReliabilityService } from '../server/reliability/reliability.js';
 
@@ -136,6 +137,7 @@ function makeApp() {
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
       board: new LibraryBoard(db, new LibraryService(db, catalogSync), failingFetch, () => {}),
       statusBoard: new StatusBoard(db, failingFetch, () => {}),
+      push: new PushService(db, failingFetch, () => {}),
     },
   );
   return { app, auth, db, history, monitor };
@@ -620,5 +622,62 @@ describe('roles', () => {
     } finally {
       t.restore();
     }
+  });
+});
+
+describe('phone app sign-in', () => {
+  /** A request as the phone app makes it: no cookie, no website header, the token in Authorization. */
+  const fromApp = async (app: ReturnType<typeof makeApp>['app'], method: string, path: string, body?: unknown, token?: string) => {
+    const res = await app.request(`http://almanac.test${path}`, {
+      method,
+      headers: {
+        'X-Almanac-Client': 'app',
+        'User-Agent': 'Almanac app/1.0 (iPhone)',
+        Host: 'almanac.test',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, json: (await res.json().catch(() => null)) as Record<string, unknown> | null, cookie: res.headers.get('set-cookie') };
+  };
+
+  it('signs in with a password and a 2FA code, then uses its own token', async () => {
+    const env = await setUp();
+    let now = Date.now();
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      expect((await fromApp(env.app, 'GET', '/api/app/info')).json).toMatchObject({ app: 'almanac', apiVersion: 1 });
+
+      const login = await fromApp(env.app, 'POST', '/api/auth/login', { username: 'alex', password: PASSWORD });
+      expect(login.json).toMatchObject({ next: 'totp' });
+      expect(login.cookie).toBeNull(); // the app gets a token, not a cookie
+      const pending = login.json!.token as string;
+      expect((await fromApp(env.app, 'GET', '/api/activity', undefined, pending)).status).toBe(401); // not until the 2FA code
+
+      now += 30_000;
+      const verified = await fromApp(env.app, 'POST', '/api/auth/verify', { code: codeAt(env.secret, currentStep(now)) }, pending);
+      expect(verified.status).toBe(200);
+      const token = verified.json!.token as string;
+      expect(token).toBeTruthy();
+      expect((await fromApp(env.app, 'GET', '/api/activity', undefined, token)).status).toBe(200);
+      // Changes work without the website's anti-forgery header.
+      expect((await fromApp(env.app, 'POST', '/api/app/push', { pushToken: 'ExponentPushToken[abcdefghijklmnop]', platform: 'ios' }, token)).status).toBe(200);
+
+      // It shows in Settings as the app, and signing it out there locks it out.
+      const sessions = (await env.c.get('/api/auth/account/sessions')).json!.sessions as { id: string; app: boolean; current: boolean }[];
+      const phone = sessions.find((x) => x.app)!;
+      expect(phone).toBeTruthy();
+      expect((await env.c.del(`/api/auth/account/sessions/${phone.id}`)).status).toBe(200);
+      expect((await fromApp(env.app, 'GET', '/api/activity', undefined, token)).status).toBe(401);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('still needs the website header for cookie sign-ins', async () => {
+    const env = await setUp();
+    const res = await env.app.request('http://almanac.test/api/moderation/tags', { method: 'POST', headers: { Cookie: env.c.cookie, Host: 'almanac.test' } });
+    expect(res.status).toBe(403);
   });
 });

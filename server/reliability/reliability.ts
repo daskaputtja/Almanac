@@ -32,6 +32,8 @@ const MEASURED = 'end_reason IS NOT NULL AND watched_seconds IS NOT NULL';
  */
 export class ReliabilityService {
   private siloCache = new Map<number, { at: number; value: SiloPlaybackActivity | null }>();
+  /** Also told about alerts (for push notifications to the phone app). */
+  onAlert: ((message: { title: string; body: string; path?: string }) => void) | null = null;
   private timer: NodeJS.Timeout | null = null;
 
   constructor(
@@ -110,7 +112,9 @@ export class ReliabilityService {
    * for the time of day, and again when things are back to normal.
    */
   async checkAlert(now = Date.now()): Promise<'alerted' | 'recovered' | null> {
-    if (!this.staff?.wants('reliability')) return null;
+    if (!this.staff) return null;
+    const toStaff = this.staff.wants('reliability');
+    if (!toStaff && !this.onAlert) return null;
     const windowStart = new Date(now - ALERT_WINDOW_MS).toISOString();
     const current = this.counts('ended_at >= ? AND ended_at < ?', windowStart, new Date(now).toISOString());
 
@@ -132,7 +136,8 @@ export class ReliabilityService {
         .filter((p) => p.dropped > 0)
         .sort((a, b) => b.dropped - a.dropped)
         .slice(0, 5);
-      await this.staff.send({
+      this.onAlert?.({ title: 'Streams are dropping more than usual', body: `${pct(rate)} of streams in the last hour dropped; usually about ${pct(typical)}.`, path: '/server/reliability' });
+      if (toStaff) await this.staff.send({
         author: { name: 'Almanac · server alert' },
         title: 'Streams are dropping more than usual',
         description:
@@ -150,7 +155,8 @@ export class ReliabilityService {
       return 'alerted';
     }
     if (state.alerting && current.plays >= ALERT_MIN_PLAYS / 2 && rate <= typical * 1.3) {
-      await this.staff.send({
+      this.onAlert?.({ title: 'Streams are back to normal', body: `${pct(rate)} of streams in the last hour dropped, close to the usual ${pct(typical)}.`, path: '/server/reliability' });
+      if (toStaff) await this.staff.send({
         author: { name: 'Almanac · server alert' },
         title: 'Streams are back to normal',
         description: `${pct(rate)} of streams in the last hour dropped, close to the usual ${pct(typical)}.`,

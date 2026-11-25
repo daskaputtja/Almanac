@@ -353,6 +353,20 @@ const MIGRATIONS: string[] = [
     CREATE INDEX suspension_requests_user ON suspension_requests (user_id, requested_at DESC);
     CREATE INDEX suspension_requests_status ON suspension_requests (status);
   `,
+  /* 18: the phone app: app sign-ins, and phones registered for push notifications */ `
+    ALTER TABLE auth_sessions ADD COLUMN client_kind TEXT NOT NULL DEFAULT 'web';
+    CREATE TABLE push_devices (
+      session_id   TEXT PRIMARY KEY,   -- the app sign-in (auth_sessions.public_id) it belongs to
+      user_id      INTEGER NOT NULL REFERENCES auth_users (id) ON DELETE CASCADE,
+      push_token   TEXT NOT NULL,
+      platform     TEXT,
+      device_name  TEXT,
+      preferences  TEXT NOT NULL,      -- JSON: which notifications this phone wants
+      created_at   TEXT NOT NULL,
+      last_sent_at TEXT,
+      last_error   TEXT
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;

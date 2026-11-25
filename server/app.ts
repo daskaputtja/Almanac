@@ -30,6 +30,8 @@ import type { ReliabilityService } from './reliability/reliability.js';
 import type { StaffAlerts } from './notify/staff.js';
 import type { LibraryBoard } from './notify/board.js';
 import type { StatusBoard } from './notify/status.js';
+import { PushError, type PushService } from './push/push.js';
+import { APP_API_VERSION, type AppServerInfo } from '../shared/app.js';
 import { SuspensionError, type SuspensionActor, type SuspensionService } from './suspensions/suspensions.js';
 import type { SuspensionStatus } from '../shared/suspensions.js';
 import { RELIABILITY_RANGES, type ReliabilityRange } from '../shared/reliability.js';
@@ -63,6 +65,7 @@ export interface AppServices {
   suspensions: SuspensionService;
   board: LibraryBoard;
   statusBoard: StatusBoard;
+  push: PushService;
 }
 
 const PLAY_METHODS: PlayMethod[] = ['direct', 'direct_stream', 'remux', 'transcode'];
@@ -124,8 +127,8 @@ function userWithoutIps(user: UserDetail): UserDetail {
 }
 
 export function createApp(
-  config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'>,
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard }: AppServices,
+  config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -154,6 +157,18 @@ export function createApp(
   app.get('/api/health', (c) => {
     const { fetchedAt, error } = monitor.current();
     return c.json({ status: error ? 'degraded' : 'ok', fetchedAt, error });
+  });
+
+  // The phone app checks an address is an Almanac before asking anyone to sign in.
+  app.get('/api/app/info', (c) => {
+    let siloHost: string | null = null;
+    try {
+      siloHost = config.siloUrl ? new URL(config.siloUrl).host : null;
+    } catch {
+      siloHost = null;
+    }
+    const info: AppServerInfo = { app: 'almanac', apiVersion: APP_API_VERSION, siloHost };
+    return c.json(info);
   });
 
   // A shared recap link works without signing in, and shows only that recap.
@@ -291,6 +306,7 @@ export function createApp(
     if (err instanceof ModerationError) return c.json({ error: err.message }, err.status);
     if (err instanceof NotifyError || err instanceof MetadataError) return c.json({ error: err.message }, 400);
     if (err instanceof SuspensionError) return c.json({ error: err.message }, err.status);
+    if (err instanceof PushError) return c.json({ error: err.message }, 400);
     console.error(err);
     return c.json({ error: 'Something went wrong.' }, 500);
   });
@@ -441,6 +457,22 @@ export function createApp(
       c.get('session').user.username,
     );
     return c.json({ keys });
+  });
+
+  // The phone app's push notifications, for the phone (sign-in) making the request.
+  app.get('/api/app/push', (c) => c.json({ preferences: push.preferences(c.get('session').publicId) }));
+  app.post('/api/app/push', async (c) => {
+    const session = c.get('session');
+    return c.json({ preferences: push.register(session.publicId, session.user.id, await jsonBody(c)) });
+  });
+  app.post('/api/app/push/preferences', async (c) => c.json({ preferences: push.setPreferences(c.get('session').publicId, await jsonBody(c)) }));
+  app.post('/api/app/push/test', async (c) => {
+    await push.test(c.get('session').publicId);
+    return c.json({ ok: true });
+  });
+  app.delete('/api/app/push', (c) => {
+    push.unregister(c.get('session').publicId);
+    return c.json({ ok: true });
   });
 
   // Suspensions through the billing portal. Mods ask; admins approve. A reason is always required.

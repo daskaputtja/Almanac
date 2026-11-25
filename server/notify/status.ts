@@ -32,6 +32,8 @@ const KUMA = { down: 0, up: 1, pending: 2, maintenance: 3 } as const;
 export class StatusBoard {
   private readonly settings: SettingsStore;
   private timer: NodeJS.Timeout | null = null;
+  /** Called with servers that just went down or came back up. */
+  onChange: ((changes: StatusBoardMonitor[]) => void) | null = null;
 
   constructor(
     db: Database,
@@ -111,6 +113,15 @@ export class StatusBoard {
     if (!s.pageUrl) return;
     try {
       const monitors = await this.read(s);
+      // Tell anyone listening (the phone app's notifications) when a server goes down or comes back.
+      if (s.monitors.length && this.onChange) {
+        const before = new Map(s.monitors.map((m) => [m.name, m.state]));
+        const changes = monitors.filter((m) => {
+          const was = before.get(m.name);
+          return (m.state === 'down' && was === 'up') || (m.state === 'up' && was === 'down');
+        });
+        if (changes.length) this.onChange(changes);
+      }
       let messageId = s.messageId;
       if (s.webhookUrl) messageId = await upsertWebhookMessage(s.webhookUrl, s.messageId, [statusEmbed(monitors)], this.fetchImpl);
       this.settings.set(KEY, { ...this.stored(), monitors, messageId, lastUpdatedAt: new Date().toISOString(), lastError: null }, null);

@@ -15,6 +15,7 @@ interface SessionInfo {
   lastSeenAt: string;
   ip: string | null;
   userAgent: string | null;
+  app?: boolean;
 }
 
 export function SettingsPage() {
@@ -83,7 +84,7 @@ function Sessions() {
           <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5 text-sm">
             <div className="min-w-0 flex-1">
               <p className="font-medium">
-                {describeBrowser(s.userAgent)}
+                {s.app ? `Almanac app${s.userAgent?.match(/\((.+?)\)/)?.[1] ? ` (${s.userAgent.match(/\((.+?)\)/)![1]})` : ''}` : describeBrowser(s.userAgent)}
                 {s.current && <span className="ml-2 rounded border border-accent-dim px-1.5 py-px text-[11px] text-accent">This device</span>}
               </p>
               <p className="text-xs text-ink-faint">

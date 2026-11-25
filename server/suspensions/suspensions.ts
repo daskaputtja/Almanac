@@ -61,6 +61,10 @@ export interface SuspensionHooks {
   tellStaff?: (embed: DiscordEmbed) => Promise<void>;
   /** Almanac's own address, for links in staff posts. */
   baseUrl?: () => string | null;
+  /** A mod's request is waiting for an admin (for push notifications). */
+  onPending?: (request: SuspensionRequest) => void;
+  /** A request was approved, rejected or failed (for push notifications). */
+  onDecided?: (request: SuspensionRequest) => void;
 }
 
 /**
@@ -164,6 +168,7 @@ export class SuspensionService {
     if (can(actor.role, 'reviewSuspension')) return this.carryOut(id, actor, null);
 
     this.hooks.note(userId, actor, `Asked for this account to be ${action === 'suspend' ? 'suspended' : 'unsuspended'}: ${text}\n(Waiting for an admin to review it.)`);
+    this.hooks.onPending?.(this.get(id));
     void this.tell({
       author: { name: 'Almanac · needs an admin' },
       title: `${actor.name} asks to ${action} ${user.username}`,
@@ -187,6 +192,7 @@ export class SuspensionService {
         .prepare("UPDATE suspension_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, review_note = ? WHERE id = ?")
         .run(actor.name, new Date().toISOString(), why, id);
       this.hooks.note(row.user_id, actor, `Rejected ${row.requested_by}’s request to ${row.action} this account: ${why}`);
+      this.hooks.onDecided?.(this.get(id));
       return this.get(id);
     }
     return this.carryOut(id, actor, note.trim() || null);
@@ -245,6 +251,7 @@ export class SuspensionService {
       footer: { text: 'Almanac' },
       timestamp: now,
     });
+    this.hooks.onDecided?.(this.get(id));
     return this.get(id);
   }
 
