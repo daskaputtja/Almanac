@@ -10,6 +10,7 @@ import { MetadataService } from '../server/notify/metadata.js';
 import { Notifier } from '../server/notify/notifier.js';
 import { StaffAlerts } from '../server/notify/staff.js';
 import { SuspensionService } from '../server/suspensions/suspensions.js';
+import { LibraryBoard } from '../server/notify/board.js';
 import { AccountsService } from '../server/accounts/accounts.js';
 import { ReliabilityService } from '../server/reliability/reliability.js';
 
@@ -132,6 +133,7 @@ function makeApp() {
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       staff: new StaffAlerts(db, failingFetch, () => {}),
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
+      board: new LibraryBoard(db, new LibraryService(db, catalogSync), failingFetch, () => {}),
     },
   );
   return { app, auth, db, history, monitor };

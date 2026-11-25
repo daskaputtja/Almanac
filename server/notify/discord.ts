@@ -71,6 +71,54 @@ export async function postToDiscord(
   throw new DiscordError('Discord kept asking Almanac to slow down. It will try again shortly.', 429);
 }
 
+/**
+ * Post a message, or edit one this webhook posted before. Returns the message's
+ * ID. If the old message was deleted, a new one is posted.
+ */
+export async function upsertWebhookMessage(
+  webhookUrl: string,
+  messageId: string | null,
+  embeds: DiscordEmbed[],
+  fetchImpl: FetchLike = fetch,
+): Promise<string> {
+  const base = new URL(webhookUrl);
+  const body = JSON.stringify({ embeds, allowed_mentions: { parse: [] } });
+  const headers = { 'Content-Type': 'application/json', 'User-Agent': 'Almanac (https://github.com/daskaputtja/Almanac)' };
+  if (messageId) {
+    const edit = new URL(base);
+    edit.pathname = `${base.pathname.replace(/\/$/, '')}/messages/${messageId}`;
+    let res: Response;
+    try {
+      res = await fetchImpl(edit.toString(), { method: 'PATCH', headers, body, signal: AbortSignal.timeout(20_000) });
+    } catch (err) {
+      throw new DiscordError(`Couldn’t reach Discord: ${err instanceof Error ? err.message : String(err)}`, null);
+    }
+    if (res.ok) return messageId;
+    // 404 for the message means someone deleted it: post a new one below.
+    const detail = (await res.json().catch(() => null)) as { code?: number; message?: string } | null;
+    if (res.status !== 404 || detail?.code === 10015) {
+      if (res.status === 401 || res.status === 403 || detail?.code === 10015) {
+        throw new DiscordError('Discord says this webhook doesn’t exist any more. It may have been deleted; paste a new one.', res.status, true);
+      }
+      throw new DiscordError(`Discord answered ${res.status}${detail?.message ? `: ${detail.message}` : ''}`, res.status);
+    }
+  }
+  const post = new URL(base);
+  post.searchParams.set('wait', 'true');
+  let res: Response;
+  try {
+    res = await fetchImpl(post.toString(), { method: 'POST', headers, body, signal: AbortSignal.timeout(20_000) });
+  } catch (err) {
+    throw new DiscordError(`Couldn’t reach Discord: ${err instanceof Error ? err.message : String(err)}`, null);
+  }
+  const reply = (await res.json().catch(() => null)) as { id?: string; message?: string } | null;
+  if (res.status === 401 || res.status === 403 || res.status === 404) {
+    throw new DiscordError('Discord says this webhook doesn’t exist any more. It may have been deleted; paste a new one.', res.status, true);
+  }
+  if (!res.ok || !reply?.id) throw new DiscordError(`Discord answered ${res.status}${reply?.message ? `: ${reply.message}` : ''}`, res.status);
+  return reply.id;
+}
+
 // --- Messages ------------------------------------------------------------------
 
 /** One new movie. */

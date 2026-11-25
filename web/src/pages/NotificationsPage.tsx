@@ -53,6 +53,7 @@ export function NotificationsPage() {
       {data && (
         <>
           <ChannelsCard channels={data.channels} libraries={data.libraries} onChange={load} />
+          {data.board && <BoardCard board={data.board} libraries={data.libraries} onChange={load} />}
           <KeysCard keys={data.keys} onChange={load} />
           {data.staff && <StaffCard staff={data.staff} onChange={load} />}
           <LogCard log={data.log} />
@@ -478,6 +479,126 @@ function KeyForm({
         )}
       </div>
     </form>
+  );
+}
+
+// --- Library board -----------------------------------------------------------------
+
+function BoardCard({ board, libraries, onChange }: { board: NonNullable<NotificationsResponse['board']>; libraries: Libraries; onChange: () => void }) {
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [hidden, setHidden] = useState<Set<string>>(new Set(board.hiddenLibraryIds));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const problem = webhookUrl.trim() && !DISCORD_WEBHOOK_PATTERN.test(webhookUrl.trim()) ? 'That doesn’t look like a Discord webhook address.' : null;
+  const changedLibraries = JSON.stringify([...hidden].sort()) !== JSON.stringify([...board.hiddenLibraryIds].sort());
+
+  const act = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fn();
+      setMessage({ ok: true, text: done });
+      setWebhookUrl('');
+      onChange();
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Something went wrong.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (id: string) => {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setHidden(next);
+  };
+  const movies = libraries.filter((l) => (l.type ?? '').startsWith('movie'));
+  const shows = libraries.filter((l) => !(l.type ?? '').startsWith('movie'));
+
+  return (
+    <section className="rounded-xl border border-line bg-panel p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold">Library counts → Discord</h2>
+        <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+          <StatusIcon status={board.lastError ? 'failed' : board.lastUpdatedAt ? 'sent' : 'skipped'} />
+          {board.lastError ? 'Not updating' : board.lastUpdatedAt ? `Updated ${formatWhen(board.lastUpdatedAt)}` : board.webhookHint ? 'Waiting to post' : 'Not set up'}
+        </span>
+      </div>
+      <p className="mt-1 text-sm text-ink-muted">
+        One message listing each library and how much is in it, for your members to see. Almanac posts it once and edits it every hour, so the channel
+        doesn’t fill up. Pin it in Discord if you like.
+      </p>
+      {board.lastError && <p className="mt-2 text-sm text-red-200">{board.lastError}</p>}
+      <form
+        className="mt-4 flex flex-wrap items-start gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!problem) void act(() => api('/api/notifications/board', { method: 'POST', body: { webhookUrl: webhookUrl.trim(), hiddenLibraryIds: [...hidden] } }), 'Saved and posted.');
+        }}
+      >
+        <input
+          type="password"
+          autoComplete="off"
+          value={webhookUrl}
+          onChange={(e) => setWebhookUrl(e.target.value)}
+          placeholder={board.webhookHint ? `Posting to ${board.webhookHint}. Paste a new webhook to move it` : 'https://discord.com/api/webhooks/…'}
+          className={`${input} min-w-0 flex-1 basis-72`}
+          aria-label="Library counts webhook address"
+        />
+        <button type="submit" disabled={busy || !webhookUrl.trim() || Boolean(problem)} className={primary}>
+          Save
+        </button>
+      </form>
+      {problem && <p className="mt-1 text-xs text-red-200">{problem}</p>}
+
+      <fieldset className="mt-4">
+        <legend className="text-sm font-medium">Show these libraries</legend>
+        <div className="mt-2 grid gap-4 sm:grid-cols-2">
+          {[
+            ['Movies', movies],
+            ['TV', shows],
+          ].map(([label, list]) =>
+            (list as Libraries).length ? (
+              <div key={label as string}>
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-faint">{label as string}</p>
+                <div className="space-y-1">
+                  {(list as Libraries).map((l) => (
+                    <label key={l.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <input type="checkbox" checked={!hidden.has(l.id)} onChange={() => toggle(l.id)} className="h-4 w-4 accent-[var(--color-accent)]" />
+                      {l.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ) : null,
+          )}
+        </div>
+      </fieldset>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {changedLibraries && (
+          <button
+            type="button"
+            disabled={busy}
+            className={primary}
+            onClick={() => void act(() => api('/api/notifications/board', { method: 'POST', body: { hiddenLibraryIds: [...hidden] } }), board.webhookHint ? 'Saved and updated.' : 'Saved.')}
+          >
+            Save libraries
+          </button>
+        )}
+        {board.webhookHint && (
+          <>
+            <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/board/refresh', { method: 'POST' }), 'Updated.')}>
+              Update now
+            </button>
+            <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/board', { method: 'POST', body: { webhookUrl: null } }), 'Removed. Delete the old message in Discord if you like.')}>
+              Remove
+            </button>
+          </>
+        )}
+      </div>
+      {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+    </section>
   );
 }
 

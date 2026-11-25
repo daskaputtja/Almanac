@@ -61,6 +61,15 @@ export interface NotificationsResponse {
   log: NotifyLogEntry[];
   /** Added by the route. */
   staff?: StaffAlertsSettings;
+  board?: LibraryBoardSettings;
+}
+
+/** A Discord message listing every library and how much is in it, edited hourly. */
+export interface LibraryBoardSettings {
+  webhookHint: string | null;
+  hiddenLibraryIds: string[];
+  lastUpdatedAt: string | null;
+  lastError: string | null;
 }
 
 /** Discord's webhook addresses, optionally posting into a thread or forum post. */

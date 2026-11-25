@@ -92,6 +92,8 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - Waits a little for Silo to match a new file, so posts have the right title and poster
 - A test button, a log of recent posts, and channels turn themselves off (with a note) if their webhook is deleted
 
+- **Library counts:** one message in a channel of your choice listing every library and how much is in it (with new films and episodes this week), edited every hour so the channel never fills up. Choose which libraries to show
+
 ### Later
 - Notifications for other events and services
 - Recently added newsletters
