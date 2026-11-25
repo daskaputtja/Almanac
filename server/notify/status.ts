@@ -137,7 +137,7 @@ export class StatusBoard {
         throw new Error(`Couldn’t reach the status page: ${err instanceof Error ? err.message : String(err)}`);
       }
       const location = res.headers.get('location') ?? '';
-      if ((res.status >= 300 && res.status < 400 && location.includes('cloudflareaccess.com')) || res.status === 403) {
+      if ((res.status >= 300 && res.status < 400 && location.includes('cloudflareaccess.com')) || res.status === 401 || res.status === 403) {
         throw new Error(
           s.accessClientId
             ? 'Cloudflare Access didn’t let the service token through. In Zero Trust, the Uptime Kuma application needs a policy whose action is “Service Auth” (not “Allow”) that includes this token. If it has one, the secret may not match: make a new token and paste both parts again.'
