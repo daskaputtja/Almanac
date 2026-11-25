@@ -138,7 +138,11 @@ export class StatusBoard {
       }
       const location = res.headers.get('location') ?? '';
       if ((res.status >= 300 && res.status < 400 && location.includes('cloudflareaccess.com')) || res.status === 403) {
-        throw new Error('The status page is behind a Cloudflare Access login. Add a bypass rule for /api/status-page/*, or give Almanac a service token.');
+        throw new Error(
+          s.accessClientId
+            ? 'Cloudflare Access didn’t let the service token through. In Zero Trust, the Uptime Kuma application needs a policy whose action is “Service Auth” (not “Allow”) that includes this token. If it has one, the secret may not match: make a new token and paste both parts again.'
+            : 'The status page is behind a Cloudflare Access login. Give Almanac a service token (below), or add a bypass rule for /api/status-page/*.',
+        );
       }
       if (res.status === 404) throw new Error(`Uptime Kuma has no status page called “${slug}”.`);
       if (!res.ok) throw new Error(`The status page answered ${res.status}.`);
