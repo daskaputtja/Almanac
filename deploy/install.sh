@@ -37,13 +37,23 @@ echo
 existing_env="$INSTALL_DIR/.env"
 current() { [ -f "$existing_env" ] && grep -E "^$1=" "$existing_env" | head -1 | cut -d= -f2- || true; }
 
-default_domain=$(current ALMANAC_DOMAIN); default_domain=${default_domain:-almanac.example.com}
-default_silo=$(current SILO_URL); default_silo=${default_silo:-https://silo.example.com}
+# Ask for a value, offering what's already saved (if anything) as the default.
+ask() { # ask VAR "Question" "example"
+  local saved answer
+  saved=$(current "$1")
+  if [ -n "$saved" ]; then
+    read -r -p "$2 [$saved]: " answer
+    answer=${answer:-$saved}
+  else
+    read -r -p "$2 (for example $3): " answer
+  fi
+  [ -n "$answer" ] || fail "That's needed."
+  printf -v "$1" '%s' "$answer"
+}
 
-read -r -p "Address for Almanac [$default_domain]: " DOMAIN
-DOMAIN=${DOMAIN:-$default_domain}
-read -r -p "Your Silo server's address [$default_silo]: " SILO_URL
-SILO_URL=${SILO_URL:-$default_silo}
+ask ALMANAC_DOMAIN "Address for Almanac" "almanac.example.com"
+DOMAIN=$ALMANAC_DOMAIN
+ask SILO_URL "Your Silo server's address" "https://silo.example.com"
 SILO_URL=${SILO_URL%/}
 
 existing_key=$(current SILO_API_KEY)
