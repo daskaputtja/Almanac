@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Almanac",
+    "slug": "almanac",
+    "scheme": "almanac",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0a0a",
+    "primaryColor": "#ef4444",
+    "ios": {
+      "bundleIdentifier": "io.github.daskaputtja.almanac",
+      "supportsTablet": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "io.github.daskaputtja.almanac",
+      "adaptiveIcon": {
+        "backgroundColor": "#0a0a0a",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-notifications", { "color": "#ef4444" }],
+      ["expo-splash-screen", { "backgroundColor": "#0a0a0a", "image": "./assets/splash-icon.png", "imageWidth": 160 }]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

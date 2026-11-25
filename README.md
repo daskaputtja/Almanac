@@ -286,9 +286,11 @@ $event = json_decode($body, true);
 
 Use HTTPS for the portal's address: the request carries the customer's email and the reason.
 
-## Phone app (in progress)
+## Phone app
 
-Native iPhone and Android apps are being built with React Native in `mobile/`. The server side is ready:
+Native iPhone and Android apps live in [`mobile/`](mobile/README.md), built with React Native and Expo: Activity, Moderation (flags and suspension requests), Users, Server, and push notifications. See [mobile/README.md](mobile/README.md) to run it on your phone and to publish it.
+
+How the server supports it:
 
 - **Sign-in:** the app sends `X-Almanac-Client: app` and gets its token in the reply (`token`) instead of a cookie, then sends `Authorization: Bearer <token>`. The same password and 2FA steps apply. App sign-ins last up to 180 days (30 without use) and show as "Almanac app" in **Settings → Signed-in devices**, where they can be signed out.
 - **Checking an address:** `GET /api/app/info` (no sign-in) says it's an Almanac and which Silo it watches.
