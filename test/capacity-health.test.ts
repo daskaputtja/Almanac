@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CapacityService, theilSen } from '../server/capacity/capacity.js';
 import { openDatabase } from '../server/db/database.js';
 import { PlaybackHealth } from '../server/health/health.js';
+import { describeDevice, deviceTips, thirdPartyNote } from '../server/health/devices.js';
 import { StaffAlerts } from '../server/notify/staff.js';
 
 const NOW = Date.parse('2026-11-20T12:00:00Z');
@@ -192,17 +193,22 @@ describe('playback health', () => {
     expect(robin.email).toBe('robin@example.com');
     const drops = robin.issues.find((i) => i.kind === 'drops')!;
     expect(drops.severity).toBe('high');
-    expect(drops.headline).toBe('9 of 35 streams dropped (26%; usually 5%)');
+    expect(drops.headline).toBe('9 of 35 streams dropped (26%; about 4% for others on the same apps)');
     expect(drops.advice.join(' ')).toMatch(/Most drops are on Silo on Fire TV \(9 of 9\)/);
     expect(drops.advice.join(' ')).toMatch(/other devices play fine/);
   });
 
-  it('blames the app when it drops for other viewers too', () => {
+  it('judges viewers against others on the same app, and says when the app is part of it', () => {
     const { plays, health } = setup();
     for (let u = 0; u < 3; u++) plays(`fire${u}`, 15, { dropped: 4, player: 'Flaky Player', platform: 'fire-tv' });
-    plays('bad', 15, { dropped: 6, player: 'Flaky Player', platform: 'fire-tv' });
-    const robin = health.overview(NOW).users.find((u) => u.userId === 'bad')!;
-    expect(robin.issues[0]!.advice.join(' ')).toMatch(/Flaky Player drops streams for other viewers too/);
+    // As bad as everyone else on that app: not singled out.
+    plays('meh', 15, { dropped: 5, player: 'Flaky Player', platform: 'fire-tv' });
+    // Far worse than others on it: singled out, and told the app is part of it.
+    plays('bad', 15, { dropped: 13, player: 'Flaky Player', platform: 'fire-tv' });
+    const users = health.overview(NOW).users;
+    expect(users.find((u) => u.userId === 'meh')).toBeUndefined();
+    const robin = users.find((u) => u.userId === 'bad')!;
+    expect(robin.issues[0]!.advice.join(' ')).toMatch(/Flaky Player drops more streams than most apps for everyone \(2\d%\)/);
   });
 
   it('points at the connection when every device drops', () => {
@@ -225,7 +231,11 @@ describe('playback health', () => {
     const issue = robin.issues.find((i) => i.kind === 'transcoding')!;
     expect(issue.headline).toMatch(/^19 of 20 streams converted/);
     expect(issue.advice[0]).toMatch(/Mostly on Old Box on Roku/);
-    expect(issue.advice.join(' ')).toMatch(/HEVC/);
+    expect([...issue.advice, ...issue.device!.tips].join(' ')).toMatch(/HEVC/);
+    // And for their device specifically.
+    expect(issue.device!.name).toBe('Roku');
+    expect(issue.device!.tips.join(' ')).toMatch(/Cheaper and older Rokus can’t play HEVC/);
+    expect(issue.device!.tips.join(' ')).toMatch(/DTS or TrueHD/);
     expect(robin.reasons).toContainEqual(expect.objectContaining({ reason: 'video_codec_unsupported', streams: 5 }));
   });
 
@@ -242,9 +252,90 @@ describe('playback health', () => {
     expect(health.forUser('ok1', NOW)!.user.issues).toEqual([]);
   });
 
+  it('doesn’t count drops from apps that never say they stopped, or titles watched to the end', () => {
+    const { db, plays, health } = setup();
+    // Every stream in this app ends without a stop, for everyone.
+    for (let u = 0; u < 3; u++) plays(`quiet${u}`, 12, { dropped: 12, player: 'Quiet App', platform: 'tizen' });
+    plays('bad', 15, { dropped: 15, player: 'Quiet App', platform: 'tizen' });
+    plays('bad', 12, { player: 'Silo', platform: 'android-tv' });
+    expect(health.overview(NOW).users.find((u) => u.userId === 'bad')).toBeUndefined();
+    const mine = health.forUser('bad', NOW)!;
+    expect(mine.user.dropPlays).toBe(12);
+    expect(mine.user.players.find((p) => p.label === 'Quiet App')).toMatchObject({ plays: 15, dropPlays: 0, dropped: 0 });
+
+    // A stream that "expired" after being watched to the end isn't a drop either.
+    db.prepare("UPDATE plays SET client_name = 'Silo', end_reason = 'expired', completed = 1 WHERE user_id = 'ok1'").run();
+    expect(health.forUser('ok1', NOW)!.user.dropped).toBe(0);
+  });
+
   it('ignores plays older than 30 days', () => {
     const { plays, health } = setup();
     plays('bad', 20, { dropped: 15, daysAgo: 40 });
     expect(health.forUser('bad', NOW)).toBeNull();
+  });
+});
+
+describe('devices', () => {
+  it('recognises devices from what Silo reports', () => {
+    const d = (platform: string | null, client: string | null, model: string | null) => describeDevice(platform, client, model);
+    expect(d('android-tv', 'Silo Android TV', 'Amazon AFTKA')).toEqual({ kind: 'fire-tv-4k', name: 'Fire TV Stick 4K Max (2021)' });
+    expect(d('android-tv', 'Silo Android TV', 'Amazon AFTSS')).toEqual({ kind: 'fire-tv-hd', name: 'Fire TV Stick Lite' });
+    expect(d('android-tv', 'Silo Android TV', 'Amazon AFTZZZ')).toEqual({ kind: 'fire-tv', name: 'Fire TV (AFTZZZ)' });
+    expect(d('android-tv', 'Silo Android TV', 'NVIDIA SHIELD Android TV')!.kind).toBe('shield');
+    expect(d('android-tv', 'Silo Android TV', 'Google Google TV Streamer')).toEqual({ kind: 'google-tv-streamer', name: 'Google TV Streamer' });
+    expect(d('android-tv', 'Silo Android TV', 'Google Chromecast HD')!.kind).toBe('chromecast-hd');
+    expect(d('android-tv', 'Silo Android TV', 'onn onn. 4K Plus Streaming')).toEqual({ kind: 'onn', name: 'onn 4K Plus Streaming' });
+    expect(d('android-tv', 'Silo Android TV', 'TCL Smart TV Pro')).toEqual({ kind: 'android-tv-set', name: 'TCL Smart TV Pro' });
+    expect(d('android-tv', 'Silo Android TV', 'Sony BRAVIA 4K VH21')!.kind).toBe('android-tv-set');
+    expect(d('android-tv', 'Silo Android TV', 'SDMC 270')).toEqual({ kind: 'android-tv-box', name: 'SDMC 270' });
+    expect(d('tvOS', 'Silo Apple TV', 'Apple TV')!.kind).toBe('apple-tv');
+    expect(d('iOS', 'Silo iPad', 'iPad')).toEqual({ kind: 'iphone', name: 'iPad' });
+    expect(d('iOS Web', 'Silo Web', 'Safari on iOS')).toEqual({ kind: 'browser', name: 'Safari on iOS' });
+    expect(d(null, 'Silo Web', null)).toEqual({ kind: 'browser', name: 'web browser' });
+    expect(d(null, 'Jellyfin Roku', null)!.kind).toBe('roku');
+    expect(d(null, 'Jellyfin for WebOS', null)!.kind).toBe('lg-tv');
+    expect(d(null, 'Jellyfin for Tizen', null)!.kind).toBe('samsung-tv');
+    expect(d('xbox', 'Silolux for Xbox', null)!.kind).toBe('xbox');
+    expect(d('android', 'Silo Android', 'samsung SM-S938B')).toEqual({ kind: 'android-phone', name: 'Samsung SM-S938B' });
+    expect(d(null, 'Infuse-Direct', null)).toBeNull();
+  });
+
+  it('gives tips for the device and the reasons', () => {
+    const lite = describeDevice('android-tv', 'Silo Android TV', 'Amazon AFTSS')!;
+    expect(deviceTips(lite, 'drops').join(' ')).toMatch(/Ethernet Adapter for Fire TV/);
+    expect(deviceTips(lite, 'transcoding', ['video_codec_unsupported']).join(' ')).toMatch(/1080p model/);
+    const roku = describeDevice('roku', 'Moonfin Roku', null)!;
+    expect(deviceTips(roku, 'transcoding', ['audio_codec_unsupported', 'subtitle_burn_in']).join(' ')).toMatch(/DTS or TrueHD.*image subtitles/);
+    expect(deviceTips(roku, 'transcoding', ['container_unsupported'])).toEqual([]);
+    expect(thirdPartyNote(describeDevice('android-tv', 'Jellyfin Android TV', 'NVIDIA SHIELD Android TV')!, 'Jellyfin Android TV')).toMatch(/third-party app.*NVIDIA Shield/);
+    expect(thirdPartyNote(roku, 'Moonfin Roku')).toBeNull(); // no Silo app to suggest on Roku
+    expect(thirdPartyNote(lite, 'Silo Android TV')).toBeNull();
+  });
+
+  it('names the device and what helps on it in a viewer’s issues', () => {
+    const db = openDatabase(':memory:');
+    const insert = db.prepare(
+      `INSERT INTO plays (session_id, user_id, username, profile_id, media_type, title, started_at, ended_at, end_position,
+         watched_seconds, completed, play_method, client_name, device_platform, device_id, end_reason, imported_at)
+       VALUES (?, ?, ?, 'p', 'movie', 'T', ?, ?, 0, 1800, 0, 'direct', ?, ?, ?, ?, ?)`,
+    );
+    let n = 0;
+    const add = (user: string, count: number, dropped: number, client: string, platform: string, device: string) => {
+      for (let i = 0; i < count; i++) {
+        const at = NOW - DAY - i * HOUR;
+        insert.run(`s${++n}`, user, user, new Date(at).toISOString(), new Date(at + HOUR).toISOString(), client, platform, device, i < dropped ? 'expired' : 'stopped', new Date(NOW).toISOString());
+      }
+    };
+    for (let u = 0; u < 8; u++) add(`ok${u}`, 30, 1, 'Silo iPhone', 'iOS', `phone${u}`);
+    add('bad', 20, 10, 'Silo Android TV', 'android-tv', 'stick');
+    add('bad', 10, 0, 'Silo iPhone', 'iOS', 'phone');
+    db.prepare("INSERT INTO registered_devices (user_id, device_id, device_name, platform, synced_at) VALUES ('bad', 'stick', 'Amazon AFTSS', 'android-tv', ?)").run(new Date(NOW).toISOString());
+
+    const user = new PlaybackHealth(db).overview(NOW).users[0]!;
+    const drops = user.issues.find((i) => i.kind === 'drops')!;
+    expect(drops.advice[0]).toBe('Most drops are on Silo Android TV on Fire TV Stick Lite (10 of 10).');
+    expect(drops.device!.name).toBe('Fire TV Stick Lite');
+    expect(drops.device!.tips.join(' ')).toMatch(/Select and Play\/Pause/);
+    expect(user.players.find((p) => p.label === 'Silo Android TV')!.device).toEqual({ kind: 'fire-tv-hd', name: 'Fire TV Stick Lite' });
   });
 });

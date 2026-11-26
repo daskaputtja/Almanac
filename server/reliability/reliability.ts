@@ -20,7 +20,8 @@ const ALERT_BASELINE_DAYS = 14;
 /** Too few plays and the rate is just noise. */
 export const ALERT_MIN_PLAYS = 40;
 
-const DROPPED = "end_reason = 'expired'";
+// A title watched to the end isn't a drop, even if the app never said it stopped.
+const DROPPED = "end_reason = 'expired' AND completed = 0";
 const QUICK = `watched_seconds < ${QUICK_STOP_SECONDS}`;
 /** Older history imported from Silo doesn't say how plays ended or how long they ran: leave it out. */
 const MEASURED = 'end_reason IS NOT NULL AND watched_seconds IS NOT NULL';

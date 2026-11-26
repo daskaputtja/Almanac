@@ -258,7 +258,7 @@ function PlaybackCard({ health }: { health: UserHealthResponse }) {
     <Card>
       <Label>Playback, last {health.days} days</Label>
       <Muted small>
-        {user.plays} streams · {rate(user.dropped)} dropped (usually {pct(baseline.droppedRate)}) · {rate(user.transcodes)} converted (usually {pct(baseline.transcodeRate)})
+        {user.plays} streams · {pct(user.dropPlays ? user.dropped / user.dropPlays : 0)} dropped · {rate(user.transcodes)} converted (server-wide: {pct(baseline.droppedRate)} and {pct(baseline.transcodeRate)})
       </Muted>
       {!health.enoughPlays ? <Muted>Too few streams to say whether anything’s wrong.</Muted> : null}
       {health.enoughPlays && !user.issues.length ? <Muted>Nothing stands out: their streams are going as well as everyone else’s.</Muted> : null}
@@ -271,13 +271,23 @@ function PlaybackCard({ health }: { health: UserHealthResponse }) {
               • {a}
             </Muted>
           ))}
+          {i.device ? (
+            <View style={{ gap: 2, paddingTop: 4 }}>
+              <Text style={{ color: colors.faint, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 }}>What helps on their {i.device.name}</Text>
+              {i.device.tips.map((t) => (
+                <Muted key={t} small>
+                  • {t}
+                </Muted>
+              ))}
+            </View>
+          ) : null}
         </View>
       ))}
       <View style={{ paddingTop: space.sm }}>
         {user.players.slice(0, 6).map((p) => (
           <Muted key={`${p.label}|${p.platform ?? ''}`} small>
             {p.label}
-            {p.platform ? ` (${platformLabel(p.platform)})` : ''} · {p.plays} streams · {pct(p.dropped / p.plays)} dropped
+            {p.device ? ` (${p.device.name})` : p.platform ? ` (${platformLabel(p.platform)})` : ''} · {p.plays} streams · {p.dropPlays ? `${pct(p.dropped / p.dropPlays)} dropped` : 'drops not reported'}
           </Muted>
         ))}
       </View>

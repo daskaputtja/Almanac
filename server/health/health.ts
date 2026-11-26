@@ -5,6 +5,7 @@ import { QUICK_STOP_SECONDS } from '../reliability/reliability.js';
 import { platformLabel } from '../../shared/platform.js';
 import { platformKey } from '../stats/stats.js';
 import { REASON_TEXT } from '../transcodes/doctor.js';
+import { type DeviceInfo, describeDevice, deviceTips, thirdPartyNote } from './devices.js';
 
 const DAY_MS = 86_400_000;
 /** Fewer plays than this and a couple of bad nights look like a pattern. */
@@ -12,7 +13,11 @@ export const MIN_PLAYS = 10;
 /** A player needs this many plays across everyone before we blame the app itself. */
 const MIN_PLAYER_PLAYS = 30;
 
-const DROPPED = "end_reason = 'expired'";
+/** Silo stopped hearing from the player before the end: a title watched to the end isn't a drop, however it ended. */
+const DROPPED = "end_reason = 'expired' AND completed = 0";
+/** Apps that end nearly every stream this way, for everyone, just never tell Silo they stopped. */
+const UNREPORTED_SHARE = 0.9;
+const UNREPORTED_MIN_PLAYS = 10;
 const QUICK = `watched_seconds < ${QUICK_STOP_SECONDS}`;
 /** Older imported history doesn't say how plays ended; leave it out. */
 const MEASURED = 'end_reason IS NOT NULL AND watched_seconds IS NOT NULL';
@@ -42,7 +47,13 @@ interface PlayerRow {
   username: string;
   client_name: string | null;
   device_platform: string | null;
+  /** The model a signed-in device reported, e.g. "Amazon AFTKA". */
+  model: string | null;
   plays: number;
+  /** Plays whose drops can be judged (0 for apps that never say when they stop). */
+  dropPlays: number;
+  /** Ended without Silo hearing a stop, finished or not. */
+  expired: number;
   dropped: number;
   quick: number;
   transcodes: number;
@@ -94,35 +105,46 @@ export class PlaybackHealth {
   // --- Internals -------------------------------------------------------------
 
   private rows(since: string): PlayerRow[] {
-    return this.db
+    const rows = this.db
       .prepare(
-        `SELECT user_id, MAX(username) AS username, client_name, device_platform, COUNT(*) AS plays,
-                SUM(${DROPPED}) AS dropped, SUM(${QUICK}) AS quick, SUM(play_method = 'transcode') AS transcodes
-         FROM plays WHERE ${MEASURED} AND started_at >= ?
-         GROUP BY user_id, client_name, device_platform`,
+        `SELECT p.user_id, MAX(p.username) AS username, p.client_name, p.device_platform, r.device_name AS model, COUNT(*) AS plays,
+                SUM(${DROPPED}) AS dropped, SUM(end_reason = 'expired') AS expired, SUM(${QUICK}) AS quick, SUM(p.play_method = 'transcode') AS transcodes
+         FROM plays p LEFT JOIN registered_devices r ON r.user_id = p.user_id AND r.device_id = p.device_id
+         WHERE ${MEASURED} AND p.started_at >= ?
+           -- No app name and no device: direct file streams from something that never reports in. Nothing to judge.
+           AND COALESCE(p.client_name, '') <> ''
+         GROUP BY p.user_id, p.client_name, p.device_platform, r.device_name`,
       )
       .all(since) as unknown as PlayerRow[];
+    // Leave out drops from apps that never report stopping: for them every stream looks dropped.
+    const unreported = unreportedApps(rows);
+    for (const r of rows) {
+      const silent = unreported.has(cleanClientName(r.client_name) ?? '');
+      r.dropPlays = silent ? 0 : r.plays;
+      if (silent) r.dropped = 0;
+    }
+    return rows;
   }
 
   private baseline(rows: PlayerRow[]): HealthBaseline {
-    const t = rows.reduce((a, r) => ({ plays: a.plays + r.plays, dropped: a.dropped + r.dropped, quick: a.quick + r.quick, transcodes: a.transcodes + r.transcodes }), {
-      plays: 0,
-      dropped: 0,
-      quick: 0,
-      transcodes: 0,
-    });
-    const rate = (n: number) => (t.plays ? n / t.plays : 0);
-    return { plays: t.plays, droppedRate: rate(t.dropped), quickStopRate: rate(t.quick), transcodeRate: rate(t.transcodes) };
+    const t = rows.reduce(
+      (a, r) => ({ plays: a.plays + r.plays, dropPlays: a.dropPlays + r.dropPlays, dropped: a.dropped + r.dropped, quick: a.quick + r.quick, transcodes: a.transcodes + r.transcodes }),
+      { plays: 0, dropPlays: 0, dropped: 0, quick: 0, transcodes: 0 },
+    );
+    const rate = (n: number, of = t.plays) => (of ? n / of : 0);
+    return { plays: t.plays, droppedRate: rate(t.dropped, t.dropPlays), quickStopRate: rate(t.quick), transcodeRate: rate(t.transcodes) };
   }
 
-  /** Each player's drop rate across everyone, to tell a bad app from a bad connection. */
-  private playerRates(rows: PlayerRow[]): Map<string, { plays: number; dropped: number; users: Set<string> }> {
-    const out = new Map<string, { plays: number; dropped: number; users: Set<string> }>();
+  /** Each app's totals across everyone, so viewers are compared with others on the same apps (phones drop more than TVs for everyone). */
+  private playerRates(rows: PlayerRow[]): AppRates {
+    const out: AppRates = new Map();
     for (const r of rows) {
       const key = playerKey(r.client_name, r.device_platform);
-      const p = out.get(key) ?? { plays: 0, dropped: 0, users: new Set<string>() };
+      const p = out.get(key) ?? { plays: 0, dropPlays: 0, dropped: 0, quick: 0, users: new Set<string>() };
       p.plays += r.plays;
+      p.dropPlays += r.dropPlays;
       p.dropped += r.dropped;
+      p.quick += r.quick;
       p.users.add(r.user_id);
       out.set(key, p);
     }
@@ -154,9 +176,12 @@ export class PlaybackHealth {
   private build(userId: string, rows: PlayerRow[], reasons: { reason: string; streams: number }[], email: string | null): UserHealth {
     const players = new Map<string, PlayerHealth>();
     for (const r of rows) {
-      const key = playerKey(r.client_name, r.device_platform);
-      const p = players.get(key) ?? { label: cleanClientName(r.client_name) ?? 'Unknown player', platform: r.device_platform, plays: 0, dropped: 0, quickStops: 0, transcodes: 0 };
+      const key = `${playerKey(r.client_name, r.device_platform)}|${r.model ?? ''}`;
+      const label = cleanClientName(r.client_name) ?? 'Unknown player';
+      const device = describeDevice(r.device_platform, label, r.model);
+      const p = players.get(key) ?? { label, platform: r.device_platform, device, plays: 0, dropPlays: 0, dropped: 0, quickStops: 0, transcodes: 0 };
       p.plays += r.plays;
+      p.dropPlays += r.dropPlays;
       p.dropped += r.dropped;
       p.quickStops += r.quick;
       p.transcodes += r.transcodes;
@@ -169,6 +194,7 @@ export class PlaybackHealth {
       username: rows.reduce((name, r) => r.username || name, ''),
       email,
       plays: sum((p) => p.plays),
+      dropPlays: sum((p) => p.dropPlays),
       dropped: sum((p) => p.dropped),
       quickStops: sum((p) => p.quickStops),
       transcodes: sum((p) => p.transcodes),
@@ -179,42 +205,106 @@ export class PlaybackHealth {
   }
 }
 
+/** Apps (by name) that end nearly every stream, for everyone, without telling Silo. */
+function unreportedApps(rows: PlayerRow[]): Set<string> {
+  const byApp = new Map<string, { plays: number; expired: number }>();
+  for (const r of rows) {
+    const name = cleanClientName(r.client_name);
+    if (!name) continue;
+    const a = byApp.get(name) ?? { plays: 0, expired: 0 };
+    a.plays += r.plays;
+    a.expired += r.expired;
+    byApp.set(name, a);
+  }
+  return new Set([...byApp].filter(([, a]) => a.plays >= UNREPORTED_MIN_PLAYS && a.expired / a.plays >= UNREPORTED_SHARE).map(([name]) => name));
+}
+
 function playerKey(name: string | null, platform: string | null): string {
   return `${cleanClientName(name) ?? 'Unknown player'}|${platform ? platformKey(platform) : ''}`;
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-const playerName = (p: PlayerHealth) => `${p.label}${p.platform ? ` on ${platformLabel(p.platform)}` : ''}`;
+const playerName = (p: PlayerHealth) =>
+  `${p.label}${p.device && p.device.kind !== 'browser' && p.device.kind !== 'computer' ? ` on ${p.device.name}` : p.platform && !p.device ? ` on ${platformLabel(p.platform)}` : ''}`;
 
-export function issuesFor(user: UserHealth, base: HealthBaseline, playerRates: Map<string, { plays: number; dropped: number; users: Set<string> }>): HealthIssue[] {
+/** What usually helps on this player's device, plus a word about third-party apps. */
+function deviceHelp(p: PlayerHealth | undefined, topic: 'drops' | 'slowStarts' | 'transcoding', reasons: string[] = []): HealthIssue['device'] {
+  if (!p?.device) return null;
+  const info = p.device as DeviceInfo;
+  const tips = deviceTips(info, topic, reasons);
+  const note = thirdPartyNote(info, p.label);
+  const all = note ? [...tips, note] : tips;
+  return all.length ? { name: info.name, tips: all } : null;
+}
+
+type AppRates = Map<string, { plays: number; dropPlays: number; dropped: number; quick: number; users: Set<string> }>;
+
+/**
+ * How often streams drop or stop straight away for other people on the same
+ * app, leaving this viewer out. Falls back to the server's rate when too few
+ * others use it.
+ */
+function usualRates(user: UserHealth, base: HealthBaseline, rates: AppRates) {
+  const mine = new Map<string, { dropPlays: number; dropped: number; plays: number; quick: number }>();
+  for (const p of user.players) {
+    const key = playerKey(p.label, p.platform);
+    const m = mine.get(key) ?? { dropPlays: 0, dropped: 0, plays: 0, quick: 0 };
+    m.dropPlays += p.dropPlays;
+    m.dropped += p.dropped;
+    m.plays += p.plays;
+    m.quick += p.quickStops;
+    mine.set(key, m);
+  }
+  const forPlayer = (p: PlayerHealth) => {
+    const key = playerKey(p.label, p.platform);
+    const all = rates.get(key);
+    const me = mine.get(key)!;
+    const dropPlays = (all?.dropPlays ?? 0) - me.dropPlays;
+    const plays = (all?.plays ?? 0) - me.plays;
+    return {
+      dropRate: dropPlays >= MIN_PLAYER_PLAYS ? ((all?.dropped ?? 0) - me.dropped) / dropPlays : base.droppedRate,
+      quickRate: plays >= MIN_PLAYER_PLAYS ? ((all?.quick ?? 0) - me.quick) / plays : base.quickStopRate,
+    };
+  };
+  const expectedDrops = user.players.reduce((n, p) => n + p.dropPlays * forPlayer(p).dropRate, 0);
+  const expectedQuick = user.players.reduce((n, p) => n + p.plays * forPlayer(p).quickRate, 0);
+  return { forPlayer, expectedDrops, expectedQuick };
+}
+
+/** Clearly more than expected: at least twice as many, and a real difference. */
+const wellAbove = (count: number, expected: number, of: number, margin: number) => of > 0 && count >= Math.max(expected * 2, expected + margin * of);
+
+export function issuesFor(user: UserHealth, base: HealthBaseline, rates: AppRates): HealthIssue[] {
   const issues: HealthIssue[] = [];
   const { plays } = user;
   if (plays < MIN_PLAYS) return issues;
+  const usual = usualRates(user, base, rates);
 
   // --- Streams dropping ---
-  const dropRate = user.dropped / plays;
-  if (user.dropped >= 3 && dropRate >= Math.max(base.droppedRate * 2, base.droppedRate + 0.08)) {
-    const severe = user.dropped >= 5 && dropRate >= Math.max(base.droppedRate * 3, base.droppedRate + 0.2);
+  if (user.dropPlays >= MIN_PLAYS && user.dropped >= 3 && wellAbove(user.dropped, usual.expectedDrops, user.dropPlays, 0.08)) {
+    const severe = user.dropped >= 5 && user.dropped >= Math.max(usual.expectedDrops * 3, usual.expectedDrops + 0.2 * user.dropPlays);
     issues.push({
       kind: 'drops',
       severity: severe ? 'high' : 'medium',
-      headline: `${user.dropped} of ${plays} streams dropped (${pct(dropRate)}; usually ${pct(base.droppedRate)})`,
-      advice: dropAdvice(user, base, playerRates),
+      headline: `${user.dropped} of ${user.dropPlays} streams dropped (${pct(user.dropped / user.dropPlays)}; about ${pct(usual.expectedDrops / user.dropPlays)} for others on the same apps)`,
+      advice: dropAdvice(user, base, usual.forPlayer),
+      device: deviceHelp([...user.players].sort((a, b) => b.dropped - a.dropped)[0], 'drops'),
     });
   }
 
   // --- Streams stopping straight away ---
-  const quickRate = user.quickStops / plays;
-  if (user.quickStops >= 5 && quickRate >= Math.max(base.quickStopRate * 2, base.quickStopRate + 0.15)) {
+  // Quick stops are often just browsing, so the bar is higher than for drops.
+  if (user.quickStops >= 6 && user.quickStops >= Math.max(usual.expectedQuick * 2.5, usual.expectedQuick + 0.25 * plays)) {
     const advice = ['A few quick stops are just browsing, but this many usually means streams struggle to start.'];
     const worst = [...user.players].filter((p) => p.quickStops > 0).sort((a, b) => b.quickStops - a.quickStops)[0];
     if (worst && user.players.length > 1 && worst.quickStops / user.quickStops >= 0.6) advice.push(`Most are on ${playerName(worst)} (${worst.quickStops} of ${user.quickStops}).`);
     if (user.transcodes / plays >= 0.5) advice.push('Most of their streams are converted, and converted streams take longer to start.');
     issues.push({
       kind: 'slowStarts',
-      severity: quickRate >= base.quickStopRate + 0.3 ? 'medium' : 'low',
-      headline: `${user.quickStops} of ${plays} streams stopped within seconds (${pct(quickRate)}; usually ${pct(base.quickStopRate)})`,
+      severity: user.quickStops >= usual.expectedQuick + 0.4 * plays ? 'medium' : 'low',
+      headline: `${user.quickStops} of ${plays} streams stopped within seconds (${pct(user.quickStops / plays)}; about ${pct(usual.expectedQuick / plays)} for others on the same apps)`,
       advice,
+      device: deviceHelp(worst, 'slowStarts'),
     });
   }
 
@@ -223,14 +313,17 @@ export function issuesFor(user: UserHealth, base: HealthBaseline, playerRates: M
   if (transcodeRate >= 0.75 && transcodeRate >= base.transcodeRate + 0.3) {
     const advice: string[] = [];
     const seen = new Set<string>();
+    const main = [...user.players].sort((a, b) => b.transcodes - a.transcodes)[0];
+    const device = deviceHelp(main, 'transcoding', user.reasons.map((r) => r.reason));
+    // With advice for their device, one general line is enough.
+    const general = device ? 1 : 2;
     for (const r of user.reasons) {
       const text = REASON_ADVICE[r.reason];
-      if (text && !seen.has(text) && advice.length < 2) {
+      if (text && !seen.has(text) && advice.length < general) {
         advice.push(text);
         seen.add(text);
       }
     }
-    const main = [...user.players].sort((a, b) => b.transcodes - a.transcodes)[0];
     if (main && main.transcodes / Math.max(1, user.transcodes) >= 0.6) advice.unshift(`Mostly on ${playerName(main)} (${main.transcodes} of ${user.transcodes} conversions).`);
     if (!user.reasons.length) advice.push('Almanac hasn’t caught one of their converted streams live yet, so it doesn’t know why. It will once it does.');
     issues.push({
@@ -238,36 +331,28 @@ export function issuesFor(user: UserHealth, base: HealthBaseline, playerRates: M
       severity: 'low',
       headline: `${user.transcodes} of ${plays} streams converted (${pct(transcodeRate)}; usually ${pct(base.transcodeRate)})`,
       advice,
+      device,
     });
   }
   return issues;
 }
 
-function dropAdvice(user: UserHealth, base: HealthBaseline, playerRates: Map<string, { plays: number; dropped: number; users: Set<string> }>): string[] {
+function dropAdvice(user: UserHealth, base: HealthBaseline, forPlayer: ReturnType<typeof usualRates>['forPlayer']): string[] {
   const advice: string[] = [];
-  const bad = (dropped: number, plays: number) => plays > 0 && dropped / plays >= Math.max(base.droppedRate * 2, base.droppedRate + 0.08);
+  const bad = (p: PlayerHealth) => wellAbove(p.dropped, p.dropPlays * forPlayer(p).dropRate, p.dropPlays, 0.08);
   const worst = [...user.players].sort((a, b) => b.dropped - a.dropped)[0]!;
   const concentrated = worst.dropped / user.dropped >= 0.6;
+  const judged = user.players.filter((p) => p.dropPlays >= 5);
 
-  if (concentrated) {
-    if (user.players.length > 1) advice.push(`Most drops are on ${playerName(worst)} (${worst.dropped} of ${user.dropped}).`);
-    const everyone = playerRates.get(playerKey(worst.label, worst.platform));
-    // Others' plays on that player, leaving this viewer out.
-    const othersPlays = (everyone?.plays ?? 0) - worst.plays;
-    const othersDropped = (everyone?.dropped ?? 0) - worst.dropped;
-    if (everyone && everyone.users.size >= 3 && othersPlays >= MIN_PLAYER_PLAYS && bad(othersDropped, othersPlays)) {
-      advice.push(
-        `${worst.label} drops streams for other viewers too (${pct(othersDropped / othersPlays)} of their streams), so it’s likely the app rather than their connection. Updating the app, or trying a different one, should help.`,
-      );
-      return advice;
-    }
-    const others = user.players.filter((p) => p !== worst && p.plays >= 5);
-    if (others.length && others.every((p) => !bad(p.dropped, p.plays))) {
-      advice.push('Their other devices play fine, so it’s probably that device: restarting it, updating the app, or a wired connection or stronger Wi-Fi for it.');
-      return advice;
-    }
+  if (concentrated && user.players.length > 1) advice.push(`Most drops are on ${playerName(worst)} (${worst.dropped} of ${user.dropped}).`);
+  // The app drops a lot for everyone: part of it is the app, not them.
+  const appRate = forPlayer(worst).dropRate;
+  if (concentrated && appRate >= Math.max(base.droppedRate * 2, base.droppedRate + 0.08)) {
+    advice.push(`${worst.label} drops more streams than most apps for everyone (${pct(appRate)}), so part of this is the app. Updating it, or trying a different app, may help.`);
   }
-  if (user.players.filter((p) => p.plays >= 5).length > 1 && user.players.filter((p) => p.plays >= 5).every((p) => bad(p.dropped, p.plays))) {
+  if (concentrated && judged.some((p) => p !== worst) && judged.filter((p) => p !== worst).every((p) => !bad(p))) {
+    advice.push('Their other devices play fine, so it’s probably that device: restarting it, updating the app, or a wired connection or stronger Wi-Fi for it.');
+  } else if (judged.length > 1 && judged.every(bad)) {
     advice.push('It happens on every device they use, which points to their internet connection or Wi-Fi rather than a device. A speed test, a wired connection, or a lower quality setting may help.');
   } else if (!concentrated) {
     advice.push('Drops are spread across their devices, which points to their internet connection or Wi-Fi. A speed test, a wired connection, or a lower quality setting may help.');

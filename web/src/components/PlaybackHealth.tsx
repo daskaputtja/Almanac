@@ -41,6 +41,16 @@ function Issue({ issue }: { issue: HealthIssue }) {
           ))}
         </ul>
       )}
+      {issue.device && (
+        <div className="mt-1.5 rounded-lg border border-line bg-canvas px-3 py-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-ink-faint">What helps on their {issue.device.name}</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-ink-muted">
+            {issue.device.tips.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </li>
   );
 }
@@ -66,7 +76,7 @@ export function RoughTimeList() {
         <h2 className="text-sm font-semibold">Viewers having a rough time</h2>
         <p className="mt-0.5 text-sm text-ink-muted">
           {data
-            ? `Last ${data.days} days, compared with everyone else (${formatRate(data.baseline.droppedRate)} of streams drop, ${formatRate(data.baseline.transcodeRate)} are converted). ${data.checked.toLocaleString()} viewers had enough plays to judge.`
+            ? `Last ${data.days} days. Each viewer is compared with other people using the same apps, since phones drop more than TVs for everyone. ${data.checked.toLocaleString()} viewers had enough plays to judge.`
             : 'Loading…'}
         </p>
       </div>
@@ -119,14 +129,15 @@ function rank(i: HealthIssue): number {
 /** A user's page: how playback has gone for them, by device, and what might help. */
 export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
   const { user, baseline, days } = health;
-  const rate = (n: number) => formatRate(user.plays ? n / user.plays : null);
+  const rate = (n: number, of = user.plays) => formatRate(of ? n / of : null);
+  const unjudged = user.players.filter((p) => p.dropPlays === 0);
   return (
     <section className="overflow-hidden rounded-xl border border-line bg-panel">
       <div className="px-4 pt-4">
         <h2 className="text-sm font-semibold">Playback, last {days} days</h2>
         <p className="mt-0.5 text-sm text-ink-muted">
-          {user.plays.toLocaleString()} streams: {rate(user.dropped)} dropped (usually {formatRate(baseline.droppedRate)}), {rate(user.quickStops)} stopped within
-          seconds (usually {formatRate(baseline.quickStopRate)}), {rate(user.transcodes)} converted (usually {formatRate(baseline.transcodeRate)}).
+          {user.plays.toLocaleString()} streams: {rate(user.dropped, user.dropPlays)} dropped, {rate(user.quickStops)} stopped within seconds, {rate(user.transcodes)} converted.
+          Across the server: {formatRate(baseline.droppedRate)}, {formatRate(baseline.quickStopRate)} and {formatRate(baseline.transcodeRate)}.
         </p>
       </div>
       <div className="space-y-4 p-4">
@@ -143,7 +154,7 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
           <table className="w-full min-w-[28rem] text-sm">
             <thead className="text-left text-xs text-ink-faint">
               <tr>
-                <th className="px-4 py-2 font-medium">Player</th>
+                <th className="px-4 py-2 font-medium">App and device</th>
                 <th className="px-4 py-2 text-right font-medium">Streams</th>
                 <th className="px-4 py-2 text-right font-medium">Dropped</th>
                 <th className="px-4 py-2 text-right font-medium">Within seconds</th>
@@ -155,10 +166,14 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
                 <tr key={`${p.label}|${p.platform ?? ''}`} className="border-t border-line/60">
                   <td className="px-4 py-2">
                     <span className="font-medium">{p.label}</span>
-                    {p.platform && <span className="ml-1.5 text-xs text-ink-faint">{platformLabel(p.platform)}</span>}
+                    {(p.device?.name ?? p.platform) && (
+                      <span className="ml-1.5 text-xs text-ink-faint">{p.device && p.device.kind !== 'computer' ? p.device.name : platformLabel(p.platform)}</span>
+                    )}
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{p.plays.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{formatRate(p.dropped / p.plays)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums" title={p.dropPlays ? undefined : 'This app doesn’t tell Silo when playback stops, so drops can’t be judged.'}>
+                    {p.dropPlays ? formatRate(p.dropped / p.dropPlays) : '—'}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatRate(p.quickStops / p.plays)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{formatRate(p.transcodes / p.plays)}</td>
                 </tr>
@@ -166,6 +181,12 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
             </tbody>
           </table>
         </div>
+        {unjudged.length > 0 && (
+          <p className="text-xs text-ink-faint">
+            {[...new Set(unjudged.map((p) => p.label))].join(', ')} {unjudged.length === 1 ? 'doesn’t' : 'don’t'} tell Silo when playback stops (every stream
+            looks dropped, even finished ones), so drops there aren’t counted.
+          </p>
+        )}
         {user.reasons.length > 0 && (
           <p className="text-xs text-ink-faint">Converted because of: {user.reasons.map((r) => `${reasonLabel(r.reason).toLowerCase()} (${r.streams})`).join(', ')}.</p>
         )}

@@ -11,12 +11,18 @@ export interface HealthIssue {
   headline: string;
   /** What's behind it and what might help, in plain words. */
   advice: string[];
+  /** What usually helps on the device most involved, when Almanac knows what it is. */
+  device: { name: string; tips: string[] } | null;
 }
 
 export interface PlayerHealth {
   label: string;
   platform: string | null;
+  /** The device, when Silo says what it is (e.g. "Fire TV Stick 4K Max (2021)"). */
+  device: { name: string; kind: string } | null;
   plays: number;
+  /** Plays whose drops can be judged: 0 for apps that never tell Silo they stopped, so every stream looks dropped. */
+  dropPlays: number;
   dropped: number;
   quickStops: number;
   transcodes: number;
@@ -27,6 +33,8 @@ export interface UserHealth {
   username: string;
   email: string | null;
   plays: number;
+  /** Plays whose drops can be judged (see PlayerHealth.dropPlays). */
+  dropPlays: number;
   dropped: number;
   quickStops: number;
   transcodes: number;
