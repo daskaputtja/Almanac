@@ -48,6 +48,8 @@ export interface UserHealth {
   reasons: { reason: string; label: string; streams: number }[];
   players: PlayerHealth[];
   issues: HealthIssue[];
+  /** A friendly message for the viewer with what to try on their devices, no stats. Null when nothing's wrong. */
+  message: string | null;
 }
 
 /** Everyone's rates over the same days, to compare with. */

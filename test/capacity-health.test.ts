@@ -247,6 +247,7 @@ describe('playback health', () => {
     const mine = health.forUser('bad', NOW)!;
     expect(mine.enoughPlays).toBe(false);
     expect(mine.user.issues).toEqual([]);
+    expect(mine.user.message).toBeNull();
     expect(mine.user.dropped).toBe(5);
     expect(health.forUser('nobody', NOW)).toBeNull();
     expect(health.forUser('ok1', NOW)!.user.issues).toEqual([]);
@@ -339,6 +340,7 @@ describe('devices', () => {
     const user = new PlaybackHealth(db).overview(NOW).users.find((u) => u.userId === 'old')!;
     expect(user.players[0]).toMatchObject({ version: '1.0.0', newerVersion: '1.2.0' });
     expect(user.issues[0]!.advice.join(' ')).toMatch(/Their Silo Android TV is version 1\.0\.0, but others are on 1\.2\.0/);
+    expect(user.message).toMatch(/• Update the Silo Android TV app on your Android TV device: you’re on version 1\.0\.0, and 1\.2\.0 is out\./);
   });
 
   it('names the device and what helps on it in a viewer’s issues', () => {
@@ -366,5 +368,11 @@ describe('devices', () => {
     expect(drops.device!.name).toBe('Fire TV Stick Lite');
     expect(drops.device!.tips.join(' ')).toMatch(/Select and Play\/Pause/);
     expect(user.players.find((p) => p.label === 'Silo Android TV')!.device).toEqual({ kind: 'fire-tv-hd', name: 'Fire TV Stick Lite' });
+
+    // A message for the viewer: their device, what to try, no numbers or staff talk.
+    expect(user.message).toMatch(/^Hi,\n\nWe’ve noticed some of your streams have been cutting out on your Fire TV Stick Lite\./);
+    expect(user.message).toMatch(/• .*Select and Play\/Pause/);
+    expect(user.message).toMatch(/Your other devices seem fine/);
+    expect(user.message).not.toMatch(/%|\btheir\b|\bthey\b|Almanac|Most drops/i);
   });
 });

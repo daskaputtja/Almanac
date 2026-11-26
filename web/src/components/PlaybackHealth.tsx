@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { HealthIssue, HealthOverview, PlayerHealth, UserHealth, UserHealthResponse } from '../../../shared/health';
 import { api } from '../lib/api';
-import { formatRate, platformLabel, reasonLabel } from '../lib/format';
+import { formatRate, formatWhen, platformLabel, reasonLabel } from '../lib/format';
 import { Link } from '../lib/router';
 
 const SEVERITY: Record<HealthIssue['severity'], { label: string; color: string }> = {
@@ -112,9 +112,12 @@ export function RoughTimeList() {
                       ))}
                     </ul>
                     <DeviceList user={u} />
-                    <Link to={`/users/${encodeURIComponent(u.userId)}`} className="inline-block text-sm text-accent hover:underline">
-                      Open {u.username}’s page
-                    </Link>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {u.message && <CopyMessage message={u.message} />}
+                      <Link to={`/users/${encodeURIComponent(u.userId)}`} className="text-sm text-accent hover:underline">
+                        Open {u.username}’s page
+                      </Link>
+                    </div>
                   </div>
                 )}
               </li>
@@ -169,6 +172,94 @@ function DeviceList({ user }: { user: UserHealth }) {
   );
 }
 
+/** Copy a ready-to-send message for the viewer, with a look at it first. */
+function CopyMessage({ message }: { message: string }) {
+  const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [showing, setShowing] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setState('copied');
+    } catch {
+      setState('failed');
+      setShowing(true);
+    }
+    setTimeout(() => setState('idle'), 2500);
+  };
+  return (
+    <div className="w-full space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => void copy()} className="rounded-lg border border-line px-3 py-1.5 text-sm hover:border-accent-dim">
+          {state === 'copied' ? 'Copied' : 'Copy message for the viewer'}
+        </button>
+        <button type="button" aria-expanded={showing} onClick={() => setShowing(!showing)} className="text-sm text-ink-muted hover:text-ink hover:underline">
+          {showing ? 'Hide message' : 'Show message'}
+        </button>
+        {state === 'failed' && <span className="text-sm text-red-300">Your browser didn’t allow copying: select the text below instead.</span>}
+      </div>
+      {showing && (
+        <pre className="whitespace-pre-wrap rounded-lg border border-line bg-canvas p-3 font-sans text-sm text-ink-muted">{message}</pre>
+      )}
+      <p className="text-xs text-ink-faint">Written to the viewer, without any of the numbers, for a Discord DM or a support ticket. Edit it as you like.</p>
+    </div>
+  );
+}
+
+/** One line on a user's page: what they watch on, how it's delivered, whether it's going well, and when. */
+export function AtAGlance({ health, directPlayPercent, lastPlayedAt, watchingNow }: { health: UserHealthResponse | null; directPlayPercent: number | null; lastPlayedAt: string | null; watchingNow: boolean }) {
+  const user = health?.user;
+  const main = user ? [...user.players].sort((a, b) => b.plays - a.plays)[0] : undefined;
+  const others = user ? user.players.length - 1 : 0;
+  const issue = user?.issues.reduce<HealthIssue | null>((worst, i) => (!worst || rank(i) > rank(worst) ? i : worst), null) ?? null;
+  const status = !health
+    ? null
+    : !health.enoughPlays
+      ? { text: 'Too few streams to judge', color: '#737373' }
+      : issue
+        ? { text: KIND_LABEL[issue.kind], color: SEVERITY[issue.severity].color }
+        : { text: 'Playing fine', color: '#0ca30c' };
+  const delivery =
+    directPlayPercent == null ? null : directPlayPercent >= 75 ? 'Mostly direct play' : directPlayPercent <= 40 ? 'Mostly converted' : `${100 - directPlayPercent}% converted`;
+
+  const parts: React.ReactNode[] = [];
+  if (main) {
+    parts.push(
+      <span key="device">
+        <span className="font-medium text-ink">{deviceText(main)}</span>
+        <span>
+          {' '}
+          · {main.label}
+          {main.version ? ` ${main.version}` : ''}
+        </span>
+        {main.newerVersion && <span className="text-[#fab219]"> (update available)</span>}
+        {others > 0 && <span className="text-ink-faint"> +{others} other {others === 1 ? 'device' : 'devices'}</span>}
+      </span>,
+    );
+  }
+  if (delivery) parts.push(<span key="delivery">{delivery}</span>);
+  if (status) {
+    parts.push(
+      <span key="status" className="inline-flex items-center gap-1.5">
+        <span className="h-2 w-2 rounded-full" style={{ background: status.color }} aria-hidden="true" />
+        <span className="text-ink">{status.text}</span>
+      </span>,
+    );
+  }
+  parts.push(
+    <span key="when">{watchingNow ? <span className="text-ink">Watching now</span> : lastPlayedAt ? `Last watched ${formatWhen(lastPlayedAt)}` : 'Never watched'}</span>,
+  );
+  return (
+    <section aria-label="At a glance" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-line bg-panel px-4 py-3 text-sm text-ink-muted">
+      {parts.map((p, i) => (
+        <span key={i} className="inline-flex items-center gap-3">
+          {i > 0 && <span className="text-ink-faint" aria-hidden="true">·</span>}
+          {p}
+        </span>
+      ))}
+    </section>
+  );
+}
+
 function rank(i: HealthIssue): number {
   return { high: 3, medium: 2, low: 1 }[i.severity];
 }
@@ -197,6 +288,7 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
             ))}
           </ul>
         )}
+        {user.message && <CopyMessage message={user.message} />}
         <div className="-mx-4 overflow-x-auto">
           <table className="w-full min-w-[28rem] text-sm">
             <thead className="text-left text-xs text-ink-faint">

@@ -87,6 +87,7 @@ export class PlaybackHealth {
       if (user.plays < MIN_PLAYS) continue;
       checked++;
       user.issues = issuesFor(user, baseline, playerRates);
+      user.message = viewerMessage(user);
       if (user.issues.length) users.push(user);
     }
     const weight = (u: UserHealth) => Math.max(...u.issues.map((i) => ({ high: 3, medium: 2, low: 1 })[i.severity]));
@@ -102,7 +103,10 @@ export class PlaybackHealth {
     const baseline = this.baseline(rows);
     const user = this.build(userId, mine, this.reasons(since, userId).get(userId) ?? [], this.emails().get(userId) ?? null);
     const enoughPlays = user.plays >= MIN_PLAYS;
-    if (enoughPlays) user.issues = issuesFor(user, baseline, this.playerRates(rows));
+    if (enoughPlays) {
+      user.issues = issuesFor(user, baseline, this.playerRates(rows));
+      user.message = viewerMessage(user);
+    }
     return { days: HEALTH_DAYS, baseline, user, enoughPlays };
   }
 
@@ -209,6 +213,7 @@ export class PlaybackHealth {
       reasons: reasons.slice(0, 5).map((r) => ({ ...r, label: REASON_TEXT[r.reason] ?? r.reason.replace(/_/g, ' ') })),
       players: list,
       issues: [],
+      message: null,
     };
   }
 }
@@ -412,6 +417,89 @@ function dropAdvice(user: UserHealth, base: HealthBaseline, forPlayer: ReturnTyp
   }
   if (user.transcodes / user.plays >= 0.5) advice.push('Most of their streams are converted, which needs a steadier connection than direct play.');
   return advice;
+}
+
+// --- A message for the viewer ---------------------------------------------------
+
+/** Turn advice written for staff ("their app") into advice for the viewer ("your app"). */
+export function toYou(text: string): string {
+  return text
+    .replace(/\bThey use\b/g, 'You’re using')
+    .replace(/\bThey’ve\b/g, 'You’ve')
+    .replace(/\bThey\b/g, 'You')
+    .replace(/\bthey\b/g, 'you')
+    .replace(/\bTheir\b/g, 'Your')
+    .replace(/\btheir\b/g, 'your')
+    .replace(/\bthem\b/g, 'you');
+}
+
+/** Lines written for staff, said the way you'd say them to the viewer (null: leave out). */
+const FOR_VIEWER: [RegExp, string | null][] = [
+  [/^On phones and tablets, locking the screen/, 'Keep the app open while you watch: locking the screen or switching to another app stops the stream.'],
+  [/^Their other devices play fine/, 'Your other devices seem fine, so it’s likely that one: try restarting it and updating the app, and if you can, a wired connection or a stronger Wi-Fi signal for it.'],
+  [/^It happens on every device/, 'It’s happening on all your devices, which usually points to your internet or Wi-Fi rather than a device. A speed test, a wired connection, or a lower quality setting may help.'],
+  [/^Drops are spread across/, 'It’s happening across your devices, which usually points to your internet or Wi-Fi. A speed test, a wired connection, or a lower quality setting may help.'],
+  [/^It could be the device or their connection/, 'Restarting the device and updating the app are the quick things to try. If that doesn’t help, a wired connection or a lower quality setting usually will.'],
+  [/^A computer going to sleep ends the stream/, 'Stop your computer going to sleep while you watch, and use a cable rather than Wi-Fi if you can.'],
+  [/^A browser tab in the background/, 'Keep the browser tab open and in front while you watch, and stop the computer going to sleep.'],
+  [/^The Shield is one of the most capable players/, 'The Shield itself is rarely the problem, so it’s usually the network.'],
+  [/^Most of their streams are converted/, null],
+  [/^Budget players are slow/, null],
+];
+
+/** Staff-only lines: numbers, comparisons with other people, or about Almanac itself. */
+const STAFF_ONLY = /%|Almanac|^Most drops are|^Most are on|^Mostly on|quick stops are just browsing|other viewers|for everyone|^Their .+ is version/;
+
+/**
+ * A short, friendly message a mod can paste into a DM or ticket: what's been
+ * going wrong, on which device, and what to try, without any of the stats.
+ */
+export function viewerMessage(user: UserHealth): string | null {
+  if (!user.issues.length) return null;
+  const device = (p: PlayerHealth | undefined) => {
+    if (!p) return null;
+    if (p.device?.kind === 'computer') return 'computer';
+    if (p.device) return p.device.kind === 'browser' ? 'web browser' : p.device.name;
+    return p.platform ? platformLabel(p.platform) : null;
+  };
+  const most = (pick: (p: PlayerHealth) => number) => [...user.players].sort((a, b) => pick(b) - pick(a))[0];
+
+  const problems: string[] = [];
+  const tips: string[] = [];
+  const add = (t: string) => {
+    if (STAFF_ONLY.test(t)) return;
+    const rule = FOR_VIEWER.find(([re]) => re.test(t));
+    if (rule && rule[1] === null) return;
+    const line = rule ? rule[1]! : toYou(t);
+    if (!tips.includes(line)) tips.push(line);
+  };
+  const deviceFor = (issue: HealthIssue) =>
+    issue.kind === 'drops' ? most((p) => p.dropped) : issue.kind === 'slowStarts' ? most((p) => p.quickStops) : most((p) => p.transcodes);
+  // An old app on the device with the trouble is the first thing to fix.
+  const troubled = new Set(user.issues.map(deviceFor));
+  const old = [...troubled].find((p) => p?.newerVersion);
+  if (old) tips.push(`Update the ${old.label} app${device(old) ? ` on your ${device(old)}` : ''}: you’re on version ${old.version}, and ${old.newerVersion} is out.`);
+
+  for (const issue of user.issues) {
+    const on = deviceFor(issue);
+    const where = device(on) && on && (issue.kind === 'transcoding' ? on.transcodes : issue.kind === 'drops' ? on.dropped : on.quickStops) > 0 ? ` on your ${device(on)}` : '';
+    if (issue.kind === 'drops') problems.push(`some of your streams have been cutting out${where}`);
+    if (issue.kind === 'slowStarts') problems.push(`some of your streams have been stopping just after they start${where}`);
+    if (issue.kind === 'transcoding') problems.push(`most of what you watch${where} is being converted on our side rather than playing as it is, which can mean lower quality and more buffering`);
+    for (const t of issue.device?.tips ?? []) add(t);
+    for (const t of issue.advice) add(t);
+  }
+
+  const list = (items: string[]) => (items.length > 1 ? `${items.slice(0, -1).join(', ')} and ${items.at(-1)}` : items[0]!);
+  return [
+    'Hi,',
+    '',
+    `We’ve noticed ${list(problems)}. Here are a few things that usually help:`,
+    '',
+    ...tips.slice(0, 6).map((t) => `• ${t}`),
+    '',
+    'If it keeps happening after that, let us know and we’ll take a closer look.',
+  ].join('\n');
 }
 
 function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {

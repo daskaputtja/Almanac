@@ -17,7 +17,7 @@ import {
   useStats,
 } from '../components/StatsSections';
 import { NotesAndTags } from '../components/NotesAndTags';
-import { UserPlaybackCard } from '../components/PlaybackHealth';
+import { AtAGlance, UserPlaybackCard } from '../components/PlaybackHealth';
 import { DownloadList } from './DownloadsTab';
 import { SuspensionPanel } from '../components/Suspensions';
 import { WhereSection } from '../components/WhereSection';
@@ -124,6 +124,8 @@ export function UserPage({ userId }: { userId: string }) {
       ) : (
         <div className="h-16" />
       )}
+
+      {user && <AtAGlance health={user.health} directPlayPercent={user.directPlayPercent} lastPlayedAt={user.lastPlayedAt} watchingNow={watchingNow.length > 0} />}
 
       {user && can('requestSuspension') && user.inSilo && <SuspensionPanel key={`s-${user.id}`} userId={user.id} username={user.name} enabled={user.enabled} onChanged={() => setNotesVersion((v) => v + 1)} />}
       {user && can('moderate') && <NotesAndTags key={`n-${user.id}-${notesVersion}`} userId={user.id} username={user.name} />}
