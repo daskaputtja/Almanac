@@ -1,0 +1,32 @@
+name: Desktop app
+
+on:
+  push:
+    branches: [desktop]
+    paths: ['desktop/**', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run dist:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Almanac-Windows-installer
+          path: desktop/dist/*.exe
+          if-no-files-found: error

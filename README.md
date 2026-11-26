@@ -424,6 +424,13 @@ When an admin approves a suspension (or an automatic request), Almanac finds the
 
 Every call to Almanac gives up after a few seconds, so WHMCS is never held up if Almanac is down.
 
+## Windows app
+
+> [!WARNING]
+> **Work in progress: don't use this yet.**
+
+[`desktop/`](desktop/README.md) has a Windows app: Almanac in its own window, with a tray icon and Windows notifications for new flags, suspension requests and server alerts. It reads alerts from `GET /api/app/events`, which gives each signed-in account the recent alerts its role may see.
+
 ## Security
 
 - **Sign-in needs two things:** a password and a 6-digit code from an authenticator app (TOTP, RFC 6238). Two-factor authentication can't be turned off.

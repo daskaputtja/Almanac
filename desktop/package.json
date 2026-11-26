@@ -1,0 +1,36 @@
+{
+  "name": "almanac-desktop",
+  "productName": "Almanac",
+  "version": "0.1.0",
+  "description": "Almanac for Windows: your Almanac in its own window, with a tray icon and Windows notifications.",
+  "main": "src/main.js",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "author": "Almanac",
+  "scripts": {
+    "start": "electron .",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/setup.js && node --check src/offline.js",
+    "dist:win": "electron-builder --win nsis --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1"
+  },
+  "build": {
+    "appId": "io.github.daskaputtja.almanac",
+    "productName": "Almanac",
+    "artifactName": "Almanac-Setup-${version}.${ext}",
+    "files": ["src/**", "assets/**", "package.json"],
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Almanac"
+    }
+  }
+}

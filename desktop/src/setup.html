@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self'" />
+    <title>Almanac</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <img src="../assets/icon.png" alt="" />
+      <h1>Connect to your Almanac</h1>
+      <p>Enter the address you open Almanac at in your browser. You’ll sign in with your usual username, password and code.</p>
+      <form id="form">
+        <label for="address">Almanac’s address</label>
+        <input id="address" name="address" placeholder="almanac.example.com" autocomplete="url" autofocus required />
+        <button class="primary" id="go" type="submit">Connect</button>
+        <div class="error" id="error" role="alert"></div>
+      </form>
+      <p class="hint">You can change this later from the Almanac icon by the clock.</p>
+    </main>
+    <script src="setup.js"></script>
+  </body>
+</html>

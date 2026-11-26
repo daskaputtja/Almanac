@@ -1,0 +1,15 @@
+:root { color-scheme: dark; --canvas: #0f0f10; --panel: #18181b; --line: #2a2a2e; --ink: #f4f4f5; --muted: #a1a1aa; --faint: #71717a; --accent: #ef4444; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--canvas); color: var(--ink); font: 15px/1.5 "Segoe UI", system-ui, sans-serif; padding: 24px; }
+main { width: 100%; max-width: 440px; }
+img { width: 64px; height: 64px; border-radius: 14px; }
+h1 { font-size: 22px; margin: 16px 0 4px; }
+p { color: var(--muted); margin: 0 0 16px; }
+label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+input { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+button { margin-top: 12px; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: 0.6; cursor: default; }
+.error { color: #fca5a5; margin-top: 10px; min-height: 1.5em; }
+.hint { color: var(--faint); font-size: 13px; margin-top: 16px; }
