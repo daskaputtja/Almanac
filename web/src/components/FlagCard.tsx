@@ -4,6 +4,7 @@ import { ApiError, api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 import { FlagText } from '../lib/moderation';
 import { Link } from '../lib/router';
+import { ExceptionForm, exceptionEnds, exceptionScope } from './Exceptions';
 import { UserTags } from './UserTags';
 
 /** Severity uses the status colours, always with an icon and a word, never colour alone. */
@@ -27,6 +28,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 
 export function FlagCard({ flag, onChange, showUser = true }: { flag: ModerationFlag; onChange: () => void; showUser?: boolean }) {
   const [reviewing, setReviewing] = useState(false);
+  const [allowing, setAllowing] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -93,7 +95,28 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
         </p>
       )}
 
-      {reviewing ? (
+      {flag.exception && (
+        <p className="mt-3 rounded-lg bg-canvas px-3 py-2 text-sm text-ink-muted">
+          This account has an exception for this kind of flag ({exceptionScope(flag.exception.upTo).toLowerCase()}, {exceptionEnds(flag.exception.expiresAt)}, added by{' '}
+          {flag.exception.addedBy}: “{flag.exception.reason}”). This flag is more serious than it allows.
+        </p>
+      )}
+
+      {allowing ? (
+        <div className="mt-3">
+          <ExceptionForm
+            userId={flag.userId}
+            username={flag.username}
+            group={flag.group}
+            upTo={flag.severity === 'high' ? 'high' : 'medium'}
+            onCancel={() => setAllowing(false)}
+            onSaved={() => {
+              setAllowing(false);
+              onChange();
+            }}
+          />
+        </div>
+      ) : reviewing ? (
         <form
           className="mt-3 space-y-2"
           onSubmit={(e) => {
@@ -138,11 +161,19 @@ export function FlagCard({ flag, onChange, showUser = true }: { flag: Moderation
               Reopen
             </button>
           )}
+          {flag.status === 'open' && flag.active && (
+            <button type="button" onClick={() => setAllowing(true)} className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim" title="Stop flagging this account for this, for a while or for good">
+              Allow this…
+            </button>
+          )}
           {showUser && (
             <Link to={`/users/${encodeURIComponent(flag.userId)}`} className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim">
               View user
             </Link>
           )}
+          <Link to={`/users/${encodeURIComponent(flag.userId)}/case`} className="rounded-lg border border-line px-3 py-1.5 hover:border-accent-dim">
+            Case file
+          </Link>
         </div>
       )}
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}

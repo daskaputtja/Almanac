@@ -1,3 +1,5 @@
+import type { SuspensionRequest } from './suspensions.js';
+
 /** Account flags: behaviour worth a moderator's look. */
 
 export type FlagKind =
@@ -73,6 +75,86 @@ export interface ModerationFlag {
   active: boolean;
   status: FlagStatus;
   review: { by: string; at: string; note: string | null } | null;
+  /** The account has an exception for this kind of flag (so this one is above what it allows). */
+  exception: { upTo: ExceptionLevel; reason: string; addedBy: string; expiresAt: string | null } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Exceptions: accounts allowed to do something that would otherwise be flagged.
+
+/** medium: minor and “worth a look” flags are hidden, serious ones still show. high: every flag of the kind is hidden. */
+export type ExceptionLevel = 'medium' | 'high';
+
+export const EXCEPTION_LEVELS: { value: ExceptionLevel; label: string; detail: string }[] = [
+  { value: 'medium', label: 'Hide minor and “Worth a look” flags', detail: 'Serious flags of this kind still show.' },
+  { value: 'high', label: 'Hide every flag of this kind', detail: 'Nothing of this kind is flagged until the exception ends.' },
+];
+
+/** Is this flag of a level its account's exception hides (so it's gone quiet because of the exception)? */
+export function coveredByException(flag: Pick<ModerationFlag, 'severity' | 'exception'>): boolean {
+  const rank = { low: 1, medium: 2, high: 3 } as const;
+  return Boolean(flag.exception && rank[flag.severity] <= rank[flag.exception.upTo]);
+}
+
+export const EXCEPTION_LENGTHS: { days: number | null; label: string }[] = [
+  { days: 30, label: '30 days' },
+  { days: 90, label: '90 days' },
+  { days: 365, label: 'A year' },
+  { days: null, label: 'Until removed' },
+];
+
+export interface FlagException {
+  userId: string;
+  username: string;
+  email: string | null;
+  group: FlagGroup;
+  upTo: ExceptionLevel;
+  reason: string;
+  addedBy: string;
+  addedAt: string;
+  expiresAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// The case file: everything about one account's moderation history on one page.
+
+export interface CaseEvent {
+  at: string;
+  kind: 'flag' | 'note';
+  title: string;
+  detail: string | null;
+  by: string | null;
+  severity: Severity | null;
+}
+
+export interface CaseFile {
+  user: {
+    id: string;
+    username: string;
+    email: string | null;
+    enabled: boolean | null;
+    inSilo: boolean;
+    createdAt: string | null;
+    lastActiveAt: string | null;
+    tags: string[];
+  };
+  summary: {
+    openFlags: number;
+    flagsEver: number;
+    notes: number;
+    suspensions: number;
+    pendingRequest: boolean;
+    exceptions: number;
+    plays30Days: number;
+    downloads30Days: number;
+    lastPlayedAt: string | null;
+  };
+  flags: ModerationFlag[];
+  exceptions: FlagException[];
+  /** Suspension requests, newest first (the same shape as the suspensions API). */
+  suspensions: SuspensionRequest[];
+  /** Flags appearing and every note (reviews, suspensions and exceptions write notes too), newest first. */
+  timeline: CaseEvent[];
 }
 
 export interface FlagsResponse {

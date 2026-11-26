@@ -7,6 +7,7 @@ import { formatWhen } from '../lib/format';
 import { useModeration } from '../lib/moderation';
 import { navigate, useLocation } from '../lib/router';
 import { SuspensionQueue } from '../components/Suspensions';
+import { ExceptionsOverview } from '../components/Exceptions';
 
 type Status = 'open' | 'reviewed' | 'all';
 const GROUPS: FlagGroup[] = ['sharing', 'nonstop', 'ripping'];
@@ -19,6 +20,8 @@ export function ModerationPage() {
   const [data, setData] = useState<FlagsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { refresh: refreshCounts } = useModeration();
+  /** Bumped when a flag card changes something, so the exceptions list reloads. */
+  const [version, setVersion] = useState(0);
 
   const load = useCallback(() => {
     api<FlagsResponse>(`/api/moderation/flags?status=${status}`)
@@ -102,6 +105,7 @@ export function ModerationPage() {
       </div>
 
       <ThresholdSummary />
+      <ExceptionsOverview key={version} />
 
       {error && <p className="text-sm text-red-300">{error}</p>}
       {data && flags.length === 0 && (
@@ -117,6 +121,7 @@ export function ModerationPage() {
             onChange={() => {
               load();
               refreshCounts();
+              setVersion((v) => v + 1);
             }}
           />
         ))}

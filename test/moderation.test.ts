@@ -5,6 +5,7 @@ import { HistoryStore } from '../server/history/store.js';
 import { type PlayForDetection, THRESHOLDS, detectFlags, networkOf } from '../server/moderation/detect.js';
 import { type Actor, ModerationService } from '../server/moderation/service.js';
 import type { SiloHistoryEntry } from '../server/silo/types.js';
+import { SuspensionService } from '../server/suspensions/suspensions.js';
 
 const HOUR = 3_600_000;
 const BASE = Date.parse('2026-06-10T00:00:00Z');
@@ -353,5 +354,91 @@ describe('thresholds', () => {
 
     service.setThresholds(looser, 'alex');
     expect(service.thresholdsResponse()).toMatchObject({ thresholds: looser, updatedBy: 'alex' });
+  });
+});
+
+describe('exceptions', () => {
+  it('hides flags up to the allowed level, but serious ones still show', () => {
+    const { history, service, now, sharing } = setup();
+    history.upsert(sharing(3)); // "Worth a look"
+    service.refresh(new Map(), now);
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(1);
+
+    const e = service.addException('42', mod, { group: 'sharing', upTo: 'medium', reason: 'Family in two houses', days: 90 }, now);
+    expect(e).toMatchObject({ userId: '42', username: 'user42', group: 'sharing', upTo: 'medium', addedBy: 'morgan' });
+    expect(Date.parse(e.expiresAt!) - now).toBe(90 * 86_400_000);
+    // Cleared straight away, and written to the notes.
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(0);
+    expect(service.notes('42', mod)[0]!.body).toMatch(/^Added an exception for possible account sharing \(.*serious ones still show, until .*\): Family in two houses$/);
+
+    // A fourth network makes it serious: that shows, and says there's an exception.
+    history.upsert(sharing(1, 3));
+    service.refresh(new Map(), now + 60_000);
+    const flag = service.flags({ status: 'open', includeAdminDetails: false }).flags[0]!;
+    expect(flag.severity).toBe('high');
+    expect(flag.exception).toMatchObject({ upTo: 'medium', reason: 'Family in two houses', addedBy: 'morgan' });
+  });
+
+  it('can hide everything of a kind, and only that kind', () => {
+    const { history, service, now, sharing } = setup();
+    history.upsert(sharing(4));
+    service.addException('42', mod, { group: 'sharing', upTo: 'high', reason: 'Known household, OK’d by admin', days: null }, now);
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(0);
+    expect(service.exceptions()[0]!.expiresAt).toBeNull();
+    service.addException('42', mod, { group: 'ripping', upTo: 'high', reason: 'Takes downloads on holiday', days: 30 }, now);
+    expect(service.exceptions('42').map((x) => x.group)).toEqual(['ripping', 'sharing']); // soonest to end first
+  });
+
+  it('stops counting once it expires, or when removed', () => {
+    const { history, service, now, sharing } = setup();
+    history.upsert(sharing(3));
+    const events: string[] = [];
+    service.onFlagEvents((e) => events.push(...e.map((x) => x.reason)));
+    service.addException('42', mod, { group: 'sharing', upTo: 'medium', reason: 'Family in two houses', days: 30 }, now);
+    expect(service.exceptions(undefined, now + 31 * 86_400_000)).toEqual([]);
+
+    service.removeException('42', 'sharing', admin, now + 60_000);
+    expect(service.flags({ status: 'open', includeAdminDetails: false }).flags).toHaveLength(1);
+    expect(events).toEqual([]); // putting it back isn't news
+    expect(service.notes('42', admin)[0]!.body).toMatch(/Removed the exception for possible account sharing/);
+    expect(() => service.removeException('42', 'sharing', admin)).toThrow(/No such exception/);
+  });
+
+  it('needs a reason, a known kind and a known account', () => {
+    const { history, service, sharing } = setup();
+    history.upsert(sharing(1));
+    const ok = { group: 'sharing', upTo: 'medium', reason: 'Family in two houses', days: 30 };
+    expect(() => service.addException('42', mod, { ...ok, reason: ' ' })).toThrow(/Say why/);
+    expect(() => service.addException('42', mod, { ...ok, group: 'piracy' })).toThrow(/which kind/);
+    expect(() => service.addException('42', mod, { ...ok, upTo: 'low' })).toThrow(/how much/);
+    expect(() => service.addException('42', mod, { ...ok, days: -1 })).toThrow(/how long/);
+    expect(() => service.addException('nobody', mod, ok)).toThrow(/No such user/);
+  });
+});
+
+describe('case file', () => {
+  it('gathers flags, notes, exceptions and suspensions for one account', async () => {
+    const { db, history, service, now, sharing } = setup();
+    db.prepare("INSERT INTO silo_users (id, username, email, enabled, synced_at) VALUES ('42', 'user42', 'user42@example.com', 1, ?)").run(new Date(now).toISOString());
+    const suspensions = new SuspensionService(db, { note: (userId, a, text) => service.addNote(userId, { id: a.id, name: a.name, manageAllNotes: false }, text) }, async () => {
+      throw new Error('offline');
+    });
+    history.upsert(sharing(3));
+    service.refresh(new Map(), now);
+    service.setTags('42', mod, ['Family']);
+    service.addNote('42', mod, 'Asked about it on Discord');
+    await suspensions.request('42', 'suspend', 'Sharing with another household', { id: 2, name: 'morgan', role: 'mod' });
+    service.addException('42', mod, { group: 'ripping', upTo: 'medium', reason: 'Downloads before flights', days: 30 }, now);
+
+    const file = service.caseFile('42', suspensions, { actor: mod, includeAdminDetails: false })!;
+    expect(file.user).toMatchObject({ id: '42', username: 'user42', email: 'user42@example.com', enabled: true, inSilo: true, tags: ['Family'] });
+    expect(file.summary).toMatchObject({ openFlags: 1, flagsEver: 1, pendingRequest: true, exceptions: 1, plays30Days: 3 });
+    expect(file.flags[0]!.adminDetails).toEqual([]);
+    expect(file.suspensions[0]).toMatchObject({ action: 'suspend', status: 'pending', requestedBy: 'morgan' });
+    expect(file.timeline.some((e) => e.kind === 'flag' && e.title.startsWith('Flagged: Streamed from 3 different networks'))).toBe(true);
+    expect(file.timeline.some((e) => e.kind === 'note' && e.title === 'Asked about it on Discord' && e.by === 'morgan')).toBe(true);
+    // Newest first.
+    expect([...file.timeline].sort((a, b) => b.at.localeCompare(a.at))).toEqual(file.timeline);
+    expect(service.caseFile('nobody', suspensions, { actor: mod, includeAdminDetails: false })).toBeNull();
   });
 });

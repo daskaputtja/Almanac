@@ -3,11 +3,14 @@ import { type FlagsResponse, SUGGESTED_TAGS, type UserNote } from '../../../shar
 import { ApiError, api } from '../lib/api';
 import { formatFullDate, formatWhen } from '../lib/format';
 import { useModeration } from '../lib/moderation';
+import { UserExceptions } from './Exceptions';
 import { FlagCard } from './FlagCard';
+import { Link } from '../lib/router';
 
 /** On a user's page, for admins and mods: tags, open flags and shared notes. */
 export function NotesAndTags({ userId, username }: { userId: string; username: string }) {
   const [flags, setFlags] = useState<FlagsResponse['flags']>([]);
+  const [version, setVersion] = useState(0);
   const { refresh } = useModeration();
 
   const loadFlags = useCallback(() => {
@@ -21,9 +24,23 @@ export function NotesAndTags({ userId, username }: { userId: string; username: s
     <section className="space-y-4 rounded-xl border border-line bg-panel p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">Moderation</h2>
-        <p className="text-xs text-ink-faint">Only admins and mods see this.</p>
+        <p className="text-xs text-ink-faint">
+          Only admins and mods see this ·{' '}
+          <Link to={`/users/${encodeURIComponent(userId)}/case`} className="text-accent hover:underline">
+            Open the case file
+          </Link>
+        </p>
       </div>
       <TagEditor userId={userId} />
+      <UserExceptions
+        userId={userId}
+        username={username}
+        onChange={() => {
+          loadFlags();
+          refresh();
+          setVersion((v) => v + 1);
+        }}
+      />
       {flags.length > 0 && (
         <div className="space-y-2">
           {flags.map((f) => (
@@ -34,12 +51,13 @@ export function NotesAndTags({ userId, username }: { userId: string; username: s
               onChange={() => {
                 loadFlags();
                 refresh();
+                setVersion((v) => v + 1);
               }}
             />
           ))}
         </div>
       )}
-      <Notes userId={userId} username={username} key={flags.map((f) => f.status).join()} />
+      <Notes userId={userId} username={username} key={`${version}-${flags.map((f) => f.status).join()}`} />
     </section>
   );
 }

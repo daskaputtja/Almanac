@@ -357,6 +357,20 @@ export function createApp(
     return c.json({ ok: true });
   });
 
+  app.get('/api/moderation/exceptions', (c) => c.json({ exceptions: moderation.exceptions() }));
+  app.post('/api/moderation/users/:id/exceptions', async (c) => {
+    const body = await jsonBody(c);
+    return c.json(moderation.addException(c.req.param('id'), actor(c), { group: body.group, upTo: body.upTo, reason: body.reason, days: body.days }), 201);
+  });
+  app.post('/api/moderation/users/:id/exceptions/:group/remove', (c) => {
+    moderation.removeException(c.req.param('id'), c.req.param('group'), actor(c));
+    return c.json({ ok: true });
+  });
+  app.get('/api/moderation/users/:id/case', (c) => {
+    const file = moderation.caseFile(c.req.param('id'), suspensions, { actor: actor(c), includeAdminDetails: seesIps(c) });
+    return file ? c.json(file) : c.json({ error: 'No such user.' }, 404);
+  });
+
   app.get('/api/moderation/users/:id/notes', (c) => c.json({ notes: moderation.notes(c.req.param('id'), actor(c)) }));
   app.post('/api/moderation/users/:id/notes', async (c) => {
     moderation.addNote(c.req.param('id'), actor(c), text((await jsonBody(c)).body));

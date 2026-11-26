@@ -6,6 +6,7 @@ import { HistoryPage } from './pages/HistoryPage';
 import { LibrariesPage } from './pages/LibrariesPage';
 import { StatsPage } from './pages/StatsPage';
 import { UserPage } from './pages/UserPage';
+import { CaseFilePage } from './pages/CaseFilePage';
 import { ModerationPage } from './pages/ModerationPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { RecapPage } from './pages/RecapPage';
@@ -44,6 +45,7 @@ function Shell() {
   const page: Page = (['history', 'stats', 'users', 'libraries', 'moderation', 'notifications', 'settings', 'recap', 'server'] as Page[]).includes(section as Page) ? (section as Page) : 'activity';
   const userId = page === 'users' ? decodeURIComponent(pathname.split('/')[2] ?? '') : '';
   const userRecap = page === 'users' && pathname.split('/')[3] === 'recap';
+  const userCase = page === 'users' && pathname.split('/')[3] === 'case';
 
   return (
     <div className="min-h-screen">
@@ -107,7 +109,17 @@ function Shell() {
         {page === 'history' && <HistoryPage />}
         {page === 'stats' && <StatsPage />}
         {page === 'users' &&
-          (userId ? userRecap ? <RecapPage key={`recap-${userId}`} userId={userId} /> : <UserPage key={userId} userId={userId} /> : <UsersPage />)}
+          (userId ? (
+            userRecap ? (
+              <RecapPage key={`recap-${userId}`} userId={userId} />
+            ) : userCase && can('moderate') ? (
+              <CaseFilePage key={`case-${userId}`} userId={userId} />
+            ) : (
+              <UserPage key={userId} userId={userId} />
+            )
+          ) : (
+            <UsersPage />
+          ))}
         {page === 'recap' && <RecapPage />}
         {page === 'server' && <ServerPage />}
         {page === 'libraries' && <LibrariesPage />}

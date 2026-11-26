@@ -62,6 +62,8 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
   - *Possible ripping:* 40 or more offline downloads (or 200 GB or more) in a week; or 8 or more hours of titles watched to the end back to back with no pauses (never more than "worth a look" on its own, since autoplay with the TV left on looks the same). Titles skipped through to the end don't count
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
 - *Mark as reviewed* with a note; a reviewed flag reopens if the behaviour gets clearly worse
+- **Exceptions:** allow an account something that would otherwise be flagged (a family in two houses, downloads before flights), for 30 days, 90 days, a year or until removed, with a reason other mods can see. Choose whether serious flags of that kind still show. Add one from a flag (*Allow this…*) or the user's page; the Moderation page lists them all
+- **Case file** for every account: flags (including ones that went quiet), notes, suspension requests and exceptions with a timeline, on one page, with *Copy as text* for pasting into Discord or the billing portal
 - "On 3 networks now" badges on Activity while it's happening
 - **Adjustable thresholds** (admins, in Settings): turn checks on or off and change their levels, with a live preview of how many accounts would be flagged
 - Shared **notes** and **tags** on any user (for example VIP, Family, Warned), with tags shown next to their name everywhere

@@ -12,9 +12,17 @@ import {
   type Severity,
   type TagsResponse,
   type UserNote,
+  type ExceptionLevel,
+  type FlagException,
+  type FlagGroup,
+  GROUP_LABELS,
+  LEVEL_LABELS,
 } from '../../shared/moderation.js';
 import { type Database, transaction } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
+import type { CaseFile } from '../../shared/moderation.js';
+import type { SuspensionService } from '../suspensions/suspensions.js';
+import { buildCaseFile } from './casefile.js';
 import { type AccountExtras, type DetectedFlag, type LiveStreamForDetection, type Locate, type PlayForDetection, detectFlags } from './detect.js';
 
 export const WINDOW_DAYS = 7;
@@ -220,9 +228,16 @@ export class ModerationService {
     );
     const locate: Locate = (ip) => places.get(ip) ?? null;
 
+    // Accounts allowed to do some of this: their flags up to the allowed level don't count.
+    const allowed = new Map<string, ExceptionLevel>();
+    for (const e of this.activeExceptionRows(now)) allowed.set(`${e.user_id}:${e.flag_group}`, e.up_to);
+
     const detected = new Map<string, DetectedFlag[]>();
     for (const userId of new Set([...byUser.keys(), ...liveByUser.keys(), ...extras.keys()])) {
-      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds, extras.get(userId), locate);
+      const flags = detectFlags(byUser.get(userId) ?? [], WINDOW_DAYS, liveByUser.get(userId) ?? [], thresholds, extras.get(userId), locate).filter((f) => {
+        const upTo = allowed.get(`${userId}:${FLAG_GROUP[f.kind]}`);
+        return !upTo || SEVERITY_RANK[f.severity] > SEVERITY_RANK[upTo];
+      });
       if (flags.length) detected.set(userId, flags);
     }
     return detected;
@@ -312,6 +327,7 @@ export class ModerationService {
          FROM moderation_flags f ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`,
       )
       .all(...params) as unknown as (FlagRow & { username: string | null; email: string | null })[];
+    const exceptions = new Map(this.activeExceptionRows(Date.now()).map((e) => [`${e.user_id}:${e.flag_group}`, e]));
 
     const flags = rows.map((r): ModerationFlag => ({
       id: `${r.user_id}:${r.kind}`,
@@ -329,6 +345,9 @@ export class ModerationService {
       active: r.active === 1,
       status: r.status,
       review: r.status === 'reviewed' && r.reviewed_by ? { by: r.reviewed_by, at: r.reviewed_at!, note: r.review_note } : null,
+      exception: ((e) => (e ? { upTo: e.up_to, reason: e.reason, addedBy: e.added_by, expiresAt: e.expires_at } : null))(
+        exceptions.get(`${r.user_id}:${FLAG_GROUP[r.kind as FlagKind] ?? 'sharing'}`),
+      ),
     }));
     // Open before reviewed, then most serious, then most recent.
     flags.sort(
@@ -372,6 +391,95 @@ export class ModerationService {
       )
       .run(userId, kind);
     if (result.changes === 0) throw new ModerationError('No such flag.', 404);
+  }
+
+  /** One account's whole moderation history. Null if Almanac has never heard of it. */
+  caseFile(userId: string, suspensions: SuspensionService, options: { actor: Actor; includeAdminDetails: boolean }): CaseFile | null {
+    return buildCaseFile(this.db, this, suspensions, userId, options);
+  }
+
+  // ----- Exceptions -----
+
+  /** Active exceptions, for everyone or one account, soonest to end first. */
+  exceptions(userId?: string, now = Date.now()): FlagException[] {
+    const who = this.db.prepare('SELECT username, email FROM silo_users WHERE id = ?');
+    const fallback = this.db.prepare("SELECT username FROM plays WHERE user_id = ? AND username <> '' ORDER BY ended_at DESC LIMIT 1");
+    return this.activeExceptionRows(now)
+      .filter((e) => !userId || e.user_id === userId)
+      .map((e) => {
+        const u = who.get(e.user_id) as { username: string; email: string | null } | undefined;
+        const name = u?.username ?? (fallback.get(e.user_id) as { username: string } | undefined)?.username ?? `Deleted user ${e.user_id}`;
+        return {
+          userId: e.user_id,
+          username: name,
+          email: u?.email ?? null,
+          group: e.flag_group,
+          upTo: e.up_to,
+          reason: e.reason,
+          addedBy: e.added_by,
+          addedAt: e.added_at,
+          expiresAt: e.expires_at,
+        };
+      })
+      .sort((a, b) => (a.expiresAt ?? '9999').localeCompare(b.expiresAt ?? '9999') || a.username.localeCompare(b.username));
+  }
+
+  /** Allow an account something that would otherwise be flagged. Replaces any exception for the same kind. Written to the notes. */
+  addException(userId: string, actor: Actor, input: { group: unknown; upTo: unknown; reason: unknown; days: unknown }, now = Date.now()): FlagException {
+    const group = input.group as FlagGroup;
+    if (!(group in GROUP_LABELS)) throw new ModerationError('Choose which kind of flag to allow.');
+    const upTo = input.upTo as ExceptionLevel;
+    if (upTo !== 'medium' && upTo !== 'high') throw new ModerationError('Choose how much to allow.');
+    const reason = typeof input.reason === 'string' ? input.reason.trim() : '';
+    if (reason.length < 5) throw new ModerationError('Say why this account is allowed it, so other mods know.');
+    if (reason.length > 1000) throw new ModerationError('Keep the reason under 1,000 characters.');
+    const days = input.days === null || input.days === undefined || input.days === '' ? null : Number(input.days);
+    if (days !== null && (!Number.isInteger(days) || days < 1 || days > 3650)) throw new ModerationError('Choose how long the exception lasts.');
+    const known = this.db.prepare('SELECT 1 FROM silo_users WHERE id = ? UNION SELECT 1 FROM plays WHERE user_id = ? LIMIT 1').get(userId, userId);
+    if (!known) throw new ModerationError('No such user.', 404);
+
+    const at = new Date(now).toISOString();
+    const expiresAt = days === null ? null : new Date(now + days * 86_400_000).toISOString();
+    transaction(this.db, () => {
+      const replacing = this.db.prepare('SELECT 1 FROM flag_exceptions WHERE user_id = ? AND flag_group = ?').get(userId, group);
+      this.db
+        .prepare(
+          `INSERT INTO flag_exceptions (user_id, flag_group, up_to, reason, added_by, added_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT (user_id, flag_group) DO UPDATE SET up_to = excluded.up_to, reason = excluded.reason, added_by = excluded.added_by,
+             added_at = excluded.added_at, expires_at = excluded.expires_at`,
+        )
+        .run(userId, group, upTo, reason, actor.name, at, expiresAt);
+      const scope = upTo === 'medium' ? `${LEVEL_LABELS.low} and “${LEVEL_LABELS.medium}” flags hidden, serious ones still show` : 'every flag hidden';
+      const until = expiresAt ? `until ${new Date(expiresAt).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })}` : 'until removed';
+      this.insertNote(userId, actor, `${replacing ? 'Changed the' : 'Added an'} exception for ${GROUP_LABELS[group].title.toLowerCase()} (${scope}, ${until}): ${reason}`, at);
+    });
+    // Clear what it covers straight away. Not news, so no alerts.
+    this.refresh(this.lastLive, now, { quiet: true });
+    return this.exceptions(userId, now).find((e) => e.group === group)!;
+  }
+
+  removeException(userId: string, group: string, actor: Actor, now = Date.now()): void {
+    if (!(group in GROUP_LABELS)) throw new ModerationError('No such exception.', 404);
+    transaction(this.db, () => {
+      const result = this.db.prepare('DELETE FROM flag_exceptions WHERE user_id = ? AND flag_group = ?').run(userId, group);
+      if (result.changes === 0) throw new ModerationError('No such exception.', 404);
+      this.insertNote(userId, actor, `Removed the exception for ${GROUP_LABELS[group as FlagGroup].title.toLowerCase()}. Those flags show again.`, new Date(now).toISOString());
+    });
+    this.refresh(this.lastLive, now, { quiet: true });
+  }
+
+  private activeExceptionRows(now: number): { user_id: string; flag_group: FlagGroup; up_to: ExceptionLevel; reason: string; added_by: string; added_at: string; expires_at: string | null }[] {
+    return this.db
+      .prepare('SELECT * FROM flag_exceptions WHERE expires_at IS NULL OR expires_at > ?')
+      .all(new Date(now).toISOString()) as unknown as {
+      user_id: string;
+      flag_group: FlagGroup;
+      up_to: ExceptionLevel;
+      reason: string;
+      added_by: string;
+      added_at: string;
+      expires_at: string | null;
+    }[];
   }
 
   // ----- Notes -----

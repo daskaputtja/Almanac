@@ -367,6 +367,18 @@ const MIGRATIONS: string[] = [
       last_error   TEXT
     );
   `,
+  /* 19: exceptions: accounts allowed to do something that would otherwise be flagged */ `
+    CREATE TABLE flag_exceptions (
+      user_id     TEXT NOT NULL,
+      flag_group  TEXT NOT NULL,        -- sharing, nonstop or ripping
+      up_to       TEXT NOT NULL,        -- medium (serious flags still show) or high (all hidden)
+      reason      TEXT NOT NULL,
+      added_by    TEXT NOT NULL,
+      added_at    TEXT NOT NULL,
+      expires_at  TEXT,                 -- null: until removed
+      PRIMARY KEY (user_id, flag_group)
+    );
+  `,
 ];
 
 export type Database = DatabaseSync;
