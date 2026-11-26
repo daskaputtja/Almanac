@@ -32,6 +32,7 @@ import { UsersService } from './users/users.js';
 import { ModerationService } from './moderation/service.js';
 import { CapacityService } from './capacity/capacity.js';
 import { PlaybackHealth } from './health/health.js';
+import { PortalApi } from './portal/portal.js';
 
 let config;
 try {
@@ -175,14 +176,17 @@ const suspensions = new SuspensionService(db, {
   tellStaff: (embed) => staff.post(embed),
   baseUrl: () => staff.baseUrl(),
 });
+// The billing portal's own API (it calls Almanac with a key), and flags sent to it.
+const portalApi = new PortalApi(db, { users, moderation, health, monitor, suspensions, baseUrl: () => staff.baseUrl() });
 moderation.onFlagEvents((events) => {
   staff.flagAlerts(events).catch((err) => console.log(`Flag alert not sent: ${err instanceof Error ? err.message : String(err)}`));
+  void portalApi.flagEvents(events);
   quietly(push.flagEvents(events));
 });
 reliability.start();
 capacity.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, staff, suspensions, board, statusBoard, push });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, staff, suspensions, board, statusBoard, push });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

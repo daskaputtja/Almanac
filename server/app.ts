@@ -29,6 +29,11 @@ import type { AccountsService } from './accounts/accounts.js';
 import type { ReliabilityService } from './reliability/reliability.js';
 import { CapacityError, type CapacityService } from './capacity/capacity.js';
 import type { PlaybackHealth } from './health/health.js';
+import { PortalApiError, type PortalApi } from './portal/portal.js';
+import { FailureLimiter } from './auth/rateLimit.js';
+import { getConnInfo } from '@hono/node-server/conninfo';
+import type { Context } from 'hono';
+import { PORTAL_API_VERSION } from '../shared/portal.js';
 import type { StaffAlerts } from './notify/staff.js';
 import type { LibraryBoard } from './notify/board.js';
 import type { StatusBoard } from './notify/status.js';
@@ -65,6 +70,7 @@ export interface AppServices {
   reliability: ReliabilityService;
   capacity: CapacityService;
   health: PlaybackHealth;
+  portalApi: PortalApi;
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
@@ -136,7 +142,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, staff, suspensions, board, statusBoard, push }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -185,6 +191,56 @@ export function createApp(
     c.header('X-Robots-Tag', 'noindex');
     const recap = shares.open(c.req.param('token'));
     return recap ? c.json(recap) : c.json({ error: 'This link doesn’t work any more. Ask for a new one.' }, 404);
+  });
+
+  // ----- The billing portal's API: its own key, no session, never any IP addresses -----
+  const portalFailures = new FailureLimiter(20, 15 * 60_000);
+  const clientAddress = (c: Context): string => {
+    if (config.trustProxy) {
+      const forwarded = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
+      if (forwarded) return forwarded;
+    }
+    try {
+      return getConnInfo(c).remote.address ?? 'unknown';
+    } catch {
+      return 'unknown'; // not running under the Node server (tests)
+    }
+  };
+  app.use('/api/portal/v1/*', async (c, next) => {
+    c.header('Cache-Control', 'no-store');
+    const who = clientAddress(c);
+    const wait = portalFailures.retryAfter(who);
+    if (wait) {
+      c.header('Retry-After', String(wait));
+      return c.json({ error: 'Too many requests with a wrong key. Try again later.' }, 429);
+    }
+    const token = c.req.header('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    if (!portalApi.verify(token)) {
+      portalFailures.fail(who);
+      return c.json({ error: 'Send the portal API key from Almanac’s Settings as “Authorization: Bearer <key>”.' }, 401);
+    }
+    await next();
+  });
+  app.get('/api/portal/v1', (c) => c.json({ app: 'almanac', apiVersion: PORTAL_API_VERSION }));
+  app.get('/api/portal/v1/customers', (c) => {
+    const id = portalApi.find({ id: c.req.query('id'), username: c.req.query('username'), email: c.req.query('email') });
+    const customer = id ? portalApi.customer(id) : null;
+    return customer ? c.json({ customer }) : c.json({ error: 'No customer with that id, username or email in Silo.' }, 404);
+  });
+  app.get('/api/portal/v1/customers/:id', (c) => {
+    const customer = portalApi.customer(c.req.param('id'));
+    return customer ? c.json({ customer }) : c.json({ error: 'No customer with that id in Silo.' }, 404);
+  });
+  const days = (value: string | undefined) => (value === undefined ? 30 : Number(value));
+  app.get('/api/portal/v1/customers/:id/usage', (c) => {
+    const id = portalApi.find({ id: c.req.param('id') });
+    if (!id) return c.json({ error: 'No customer with that id in Silo.' }, 404);
+    return c.json({ id, usage: portalApi.usage(id, days(c.req.query('days'))) });
+  });
+  app.get('/api/portal/v1/usage', (c) => c.json({ customers: portalApi.allUsage(days(c.req.query('days'))) }));
+  app.post('/api/portal/v1/events', async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    return c.json({ ok: true, ...portalApi.recordEvent(body) }, 201);
   });
 
   // Sign-in. Everything under /api below this needs a signed-in session.
@@ -337,6 +393,7 @@ export function createApp(
     if (err instanceof NotifyError || err instanceof MetadataError) return c.json({ error: err.message }, 400);
     if (err instanceof SuspensionError) return c.json({ error: err.message }, err.status);
     if (err instanceof PushError) return c.json({ error: err.message }, 400);
+    if (err instanceof PortalApiError) return c.json({ error: err.message }, err.status);
     console.error(err);
     return c.json({ error: 'Something went wrong.' }, 500);
   });
@@ -559,6 +616,17 @@ export function createApp(
         c.get('session').user.username,
       ),
     );
+  });
+  app.get('/api/billing-portal/api', requirePermission('configureBilling'), (c) => c.json(portalApi.settings()));
+  app.post('/api/billing-portal/api/key', requirePermission('configureBilling'), (c) => c.json(portalApi.createKey(c.get('session').user.username)));
+  app.post('/api/billing-portal/api/revoke', requirePermission('configureBilling'), (c) => c.json(portalApi.revokeKey(c.get('session').user.username)));
+  app.post('/api/billing-portal/api/flags', requirePermission('configureBilling'), async (c) => {
+    try {
+      return c.json(portalApi.setFlagLevel((await jsonBody(c)).flagLevel, c.get('session').user.username));
+    } catch (err) {
+      if (err instanceof PortalApiError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
   });
   app.post('/api/billing-portal/test', requirePermission('configureBilling'), async (c) => {
     try {

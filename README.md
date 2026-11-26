@@ -207,7 +207,7 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | Add, change and remove accounts | ✅ | ❌ |
 | Ask for an account to be suspended or unsuspended (with a reason) | ✅ | ✅ |
 | Approve or reject suspension requests, and suspend directly | ✅ | ❌ |
-| Connect the billing portal | ✅ | ❌ |
+| Connect the billing portal (and its API key) | ✅ | ❌ |
 
 The first account is an admin. Admins manage accounts in **Settings → Accounts**: add an account with a starting password and a role, change roles, reset someone's 2FA or password, or delete an account. Every change needs the admin's own 2FA code. New accounts set up their own 2FA at first sign-in. Almanac won't let you delete or demote the last admin.
 
@@ -289,6 +289,102 @@ $event = json_decode($body, true);
 ```
 
 Use HTTPS for the portal's address: the request carries the customer's email and the reason.
+
+### Flags sent to your portal
+
+If **Settings → Billing portal → Send new flags to the portal** is on, new flags at the chosen level (or above) reach the same address, signed the same way, as a `flag` event. Answer `200`; anything else is logged and not retried.
+
+```json
+{
+  "event": "flag",
+  "customer": { "id": "42", "username": "example-user", "email": "someone@example.com" },
+  "flag": {
+    "reason": "new",
+    "kind": "bulk_opening",
+    "group": "ripping",
+    "severity": "high",
+    "headline": "Opened 244 different titles in a day without watching them",
+    "details": ["Between 2026-11-19T12:33:00.000Z and 2026-11-20T12:28:00.000Z: 259 streams started, usually 6 seconds apart, …"]
+  },
+  "almanac_url": "https://almanac.example.com/users/42",
+  "sent_at": "2026-11-26T08:25:00.000Z"
+}
+```
+
+`reason` is `new`, `worse` (got more serious) or `reopened` (a reviewed flag came back). `group` is `sharing`, `nonstop` or `ripping`; `severity` is `low`, `medium` or `high`.
+
+## Portal API
+
+The other direction: your portal calls Almanac. Make a key in **Settings → Billing portal → Portal API** (admins only; it's shown once, and *Make a new key* or *Turn the key off* stops the old one at once). Send it on every request:
+
+```
+Authorization: Bearer alm_…
+```
+
+Everything is JSON under `/api/portal/v1`. The portal never gets IP addresses. Errors are `{"error": "..."}` with `400` (bad input), `401` (wrong or missing key), `404` (no such customer) or `429` (too many wrong keys from one address).
+
+| Request | What it does |
+|---|---|
+| `GET /api/portal/v1` | Checks the key: `{"app": "almanac", "apiVersion": 1}` |
+| `GET /api/portal/v1/customers?email=…` (or `?username=…`, `?id=…`) | One customer's summary, found by email, username or Silo ID (not case-sensitive) |
+| `GET /api/portal/v1/customers/{id}` | The same, by Silo ID |
+| `GET /api/portal/v1/customers/{id}/usage?days=30` | Usage over 1 to 365 days |
+| `GET /api/portal/v1/usage?days=30` | Usage for every customer, for billing runs |
+| `POST /api/portal/v1/events` | Tell Almanac what the portal did; it's written to the customer's notes |
+
+A customer summary:
+
+```json
+{
+  "customer": {
+    "id": "42",
+    "username": "example-user",
+    "email": "someone@example.com",
+    "enabled": true,
+    "createdAt": "2026-01-20T10:00:00.000Z",
+    "lastActiveAt": "2026-11-26T08:10:00.000Z",
+    "lastPlayedAt": "2026-11-26T07:55:00.000Z",
+    "watchingNow": 1,
+    "usage": {
+      "days": 30, "plays": 85, "hoursWatched": 61.5, "activeDays": 22,
+      "peakStreams": 2, "peakStreamsAt": "2026-11-21T20:14:00.000Z",
+      "devicesUsed": 4, "devicesSignedIn": 6,
+      "downloads": 3, "downloadGb": 12.4,
+      "vpnShare": 0.1
+    },
+    "mainDevice": "Fire TV Stick 4K Max (2021)",
+    "playback": { "status": "struggling", "issues": ["38 of 85 streams dropped (45%; about 6% for others on the same apps)"] },
+    "flags": [{ "kind": "many_networks", "group": "sharing", "severity": "low", "headline": "Used 11 different networks in 7 days", "since": "2026-11-20T18:00:00.000Z", "reviewed": false }],
+    "exceptions": [{ "group": "sharing", "until": "2027-02-24T00:00:00.000Z", "reason": "Family in two houses" }],
+    "pendingSuspension": null,
+    "almanacUrl": "https://almanac.example.com/users/42"
+  }
+}
+```
+
+- `peakStreams`: the most streams playing at the same moment on different devices (a stream that timed out stops counting 10 minutes before Silo gave up on it). Use it to check a plan's stream limit.
+- `devicesUsed`: devices that played something; `devicesSignedIn`: devices signed in to the account in Silo and used in the period.
+- `vpnShare`: the share of plays over a VPN or data-centre network (0 to 1), or `null` when it isn't known yet.
+- `playback.status`: `fine`, `struggling` or `unknown` (too few plays), as on Server → Reliability.
+
+Telling Almanac what the portal did:
+
+```json
+POST /api/portal/v1/events
+{ "customer": { "email": "someone@example.com" }, "type": "suspended", "detail": "Payment failed twice" }
+```
+
+`customer` takes `id`, `username` or `email`. `type` is `suspended`, `reactivated`, `payment_failed`, `plan_changed` (add `"plan": "4 streams"`), `cancelled` or `note` (needs `detail`). It's written to the customer's notes as *Billing portal*, for example "Suspended: Payment failed twice", so it shows on their page and in their case file. The answer is `201` with `{"ok": true, "userId": "42", "note": "…"}`.
+
+Example (Node.js):
+
+```js
+const res = await fetch('https://almanac.example.com/api/portal/v1/customers?email=' + encodeURIComponent(email), {
+  headers: { Authorization: `Bearer ${process.env.ALMANAC_PORTAL_KEY}` },
+});
+const { customer } = await res.json();
+if (customer.usage.peakStreams > plan.streams) { /* over their plan's limit */ }
+```
 
 ## Security
 

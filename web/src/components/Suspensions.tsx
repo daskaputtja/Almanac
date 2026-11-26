@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { MIN_REASON_LENGTH, type BillingPortalSettings, type SuspensionAction, type SuspensionRequest, type SuspensionsResponse } from '../../../shared/suspensions';
+import type { PortalApiSettings } from '../../../shared/portal';
+import { FLAG_ALERT_LEVELS } from '../../../shared/reliability';
 import { useAuth } from '../auth/AuthGate';
 import { ApiError, api } from '../lib/api';
 import { formatFullDate, formatWhen } from '../lib/format';
@@ -411,6 +413,113 @@ export function BillingPortalSection() {
         {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
         {settings.updatedBy && <p className="text-xs text-ink-faint">Last changed by {settings.updatedBy} {settings.updatedAt ? formatWhen(settings.updatedAt) : ''}</p>}
       </form>
+      <PortalApiSettingsPart portalReady={Boolean(settings.url && settings.secretSet)} />
     </section>
+  );
+}
+
+/** The other direction: a key the portal uses to call Almanac, and which flags are sent to it. */
+function PortalApiSettingsPart({ portalReady }: { portalReady: boolean }) {
+  const [settings, setSettings] = useState<PortalApiSettings | null>(null);
+  const [newKey, setNewKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    api<PortalApiSettings>('/api/billing-portal/api').then(setSettings).catch(() => {});
+  }, []);
+
+  const act = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      await fn();
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Something went wrong.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return null;
+  return (
+    <div className="mt-6 space-y-3 border-t border-line pt-5">
+      <h3 className="font-semibold">Portal API</h3>
+      <p className="text-sm text-ink-muted">
+        Lets your portal call Almanac: look a customer up by username or email (activity, devices, open flags, VPN use, playback), read usage for billing (streams
+        at once, devices, hours, downloads), and tell Almanac what it did (suspended, reactivated, plan changed), which goes in the customer’s notes. It never gets
+        IP addresses. The README’s “Portal API” section has the details.
+      </p>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span>{settings.keySet ? `Key ending …${settings.keyHint}, made by ${settings.createdBy ?? 'an admin'} ${settings.createdAt ? formatWhen(settings.createdAt) : ''}` : 'No key yet.'}</span>
+        {settings.keySet && <span className="text-xs text-ink-faint">{settings.lastUsedAt ? `Last used ${formatWhen(settings.lastUsedAt)}` : 'Not used yet'}</span>}
+      </div>
+      {newKey && (
+        <div className="rounded-lg border border-[#fab219]/60 bg-canvas p-3 text-sm">
+          <p className="font-medium">Your portal’s key. Copy it into the portal now: Almanac won’t show it again.</p>
+          <code className="mt-2 block break-all rounded bg-panel px-2 py-1.5 font-mono text-xs">{newKey}</code>
+          <p className="mt-2 text-xs text-ink-muted">The portal sends it as <code>Authorization: Bearer &lt;key&gt;</code> to <code>{window.location.origin}/api/portal/v1/…</code></p>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          className={settings.keySet ? secondary : primary}
+          onClick={() =>
+            void act(async () => {
+              if (settings.keySet && !window.confirm('Make a new key? The old one stops working straight away.')) return;
+              const r = await api<{ key: string; settings: PortalApiSettings }>('/api/billing-portal/api/key', { method: 'POST' });
+              setNewKey(r.key);
+              setSettings(r.settings);
+            })
+          }
+        >
+          {settings.keySet ? 'Make a new key' : 'Make a key'}
+        </button>
+        {settings.keySet && (
+          <button
+            type="button"
+            disabled={busy}
+            className={secondary}
+            onClick={() =>
+              void act(async () => {
+                if (!window.confirm('Turn the key off? The portal won’t be able to call Almanac until you make a new one.')) return;
+                setSettings(await api<PortalApiSettings>('/api/billing-portal/api/revoke', { method: 'POST' }));
+                setNewKey(null);
+              })
+            }
+          >
+            Turn the key off
+          </button>
+        )}
+      </div>
+      <label className="block text-sm">
+        <span className="font-medium">Send new flags to the portal</span>
+        <select
+          value={settings.flagLevel}
+          disabled={busy}
+          onChange={(e) =>
+            void act(async () => {
+              setSettings(await api<PortalApiSettings>('/api/billing-portal/api/flags', { method: 'POST', body: { flagLevel: e.target.value } }));
+              setMessage({ ok: true, text: 'Saved.' });
+            })
+          }
+          className={`${input} mt-1 block`}
+        >
+          {FLAG_ALERT_LEVELS.map((l) => (
+            <option key={l.value} value={l.value}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-xs text-ink-faint">
+          {portalReady
+            ? 'Sent to the address above, signed like suspension requests, as a “flag” event.'
+            : 'Needs the address and signing secret above: flags are sent the same way as suspension requests.'}
+        </span>
+      </label>
+      {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+    </div>
   );
 }

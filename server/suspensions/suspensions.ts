@@ -113,6 +113,11 @@ export class SuspensionService {
     return this.portal();
   }
 
+  /** Send any other event to the portal, signed the same way (used for flag alerts). */
+  async sendEvent(payload: Record<string, unknown>): Promise<string> {
+    return this.callPortal(payload);
+  }
+
   /** Send a harmless "ping" so an admin can check the portal is set up to receive requests. */
   async testPortal(by: string): Promise<string> {
     return this.callPortal({ event: 'ping', requested_by: by });

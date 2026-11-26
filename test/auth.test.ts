@@ -39,6 +39,7 @@ import { StatsService } from '../server/stats/stats.js';
 import { UsersService } from '../server/users/users.js';
 import { CapacityService } from '../server/capacity/capacity.js';
 import { PlaybackHealth } from '../server/health/health.js';
+import { PortalApi } from '../server/portal/portal.js';
 
 describe('TOTP', () => {
   // RFC 6238 appendix B test vectors (SHA-1, 8 digits).
@@ -137,6 +138,7 @@ function makeApp() {
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       capacity: new CapacityService(db, null, () => {}),
       health: new PlaybackHealth(db),
+      portalApi: new PortalApi(db, { users: new UsersService(db), moderation: new ModerationService(db), health: new PlaybackHealth(db), monitor, suspensions: new SuspensionService(db, { note: () => {} }, failingFetch), baseUrl: () => null }, () => {}),
       staff: new StaffAlerts(db, failingFetch, () => {}),
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
       board: new LibraryBoard(db, new LibraryService(db, catalogSync), failingFetch, () => {}),
@@ -683,5 +685,108 @@ describe('phone app sign-in', () => {
     const env = await setUp();
     const res = await env.app.request('http://almanac.test/api/moderation/tags', { method: 'POST', headers: { Cookie: env.c.cookie, Host: 'almanac.test' } });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('portal API', () => {
+  function seed(db: ReturnType<typeof makeApp>['db']) {
+    db.prepare("INSERT INTO silo_users (id, username, email, enabled, created_at, synced_at) VALUES ('42', 'pike', 'pike@example.com', 1, '2026-01-01T00:00:00Z', ?)").run(new Date().toISOString());
+    const insert = db.prepare(
+      `INSERT INTO plays (session_id, user_id, username, profile_id, media_type, title, started_at, ended_at, end_position,
+         watched_seconds, completed, play_method, client_name, device_id, client_ip, end_reason, imported_at)
+       VALUES (?, '42', 'pike', 'p', 'movie', 'T', ?, ?, 0, 3600, 0, 'direct', 'Silo Android TV', ?, ?, 'stopped', ?)`,
+    );
+    const t = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    insert.run('s1', t(5), t(4), 'tv', '203.0.113.10', t(0));
+    insert.run('s2', t(4.5), t(3.5), 'phone', '198.51.100.4', t(0));
+    insert.run('s3', t(30), t(29), 'tv', '203.0.113.10', t(0));
+  }
+
+  it('stays closed without the portal’s key, and limits wrong guesses', async () => {
+    const { app } = makeApp();
+    const c = client(app);
+    expect((await c.get('/api/portal/v1')).status).toBe(401);
+    expect((await c.get('/api/portal/v1', { Authorization: 'Bearer alm_wrong' })).status).toBe(401);
+    for (let i = 0; i < 20; i++) await c.get('/api/portal/v1', { Authorization: 'Bearer alm_wrong' });
+    expect((await c.get('/api/portal/v1', { Authorization: 'Bearer alm_wrong' })).status).toBe(429);
+  });
+
+  it('looks customers up, reports usage, takes events, and never gives out addresses', async () => {
+    const { c, db, app } = await setUp();
+    seed(db);
+    const made = await c.post('/api/billing-portal/api/key');
+    expect(made.status).toBe(200);
+    const key = made.json!.key as string;
+    expect(key).toMatch(/^alm_/);
+    expect((made.json!.settings as { keyHint: string }).keyHint).toBe(key.slice(-4));
+
+    const portal = client(app);
+    const auth = { Authorization: `Bearer ${key}` };
+    expect((await portal.get('/api/portal/v1', auth)).json).toEqual({ app: 'almanac', apiVersion: 1 });
+
+    const found = await portal.get('/api/portal/v1/customers?email=PIKE@example.com', auth);
+    expect(found.status).toBe(200);
+    const customer = found.json!.customer as Record<string, unknown>;
+    expect(customer).toMatchObject({ id: '42', username: 'pike', email: 'pike@example.com', enabled: true, watchingNow: 0 });
+    expect(customer.usage).toMatchObject({ days: 30, plays: 3, hoursWatched: 3, peakStreams: 2, devicesUsed: 2 });
+    expect(JSON.stringify(found.json)).not.toMatch(/203\.0\.113|198\.51\.100/);
+    expect((await portal.get('/api/portal/v1/customers?username=nobody', auth)).status).toBe(404);
+    expect((await portal.get('/api/portal/v1/customers', auth)).status).toBe(400);
+
+    const usage = await portal.get('/api/portal/v1/customers/42/usage?days=1', auth);
+    expect(usage.json).toMatchObject({ id: '42', usage: { days: 1, plays: 2, peakStreams: 2 } });
+    expect((await portal.get('/api/portal/v1/customers/42/usage?days=900', auth)).status).toBe(400);
+    const all = await portal.get('/api/portal/v1/usage', auth);
+    expect((all.json!.customers as { id: string }[]).map((x) => x.id)).toEqual(['42']);
+
+    // The portal says what it did: it lands in the notes, by "Billing portal".
+    const event = await portal.post('/api/portal/v1/events', { customer: { username: 'PIKE' }, type: 'suspended', detail: 'Non-payment' }, auth);
+    expect(event.status).toBe(201);
+    const notes = (await c.get('/api/moderation/users/42/notes')).json!.notes as { authorName: string; body: string }[];
+    expect(notes[0]).toMatchObject({ authorName: 'Billing portal', body: 'Suspended: Non-payment' });
+    await portal.post('/api/portal/v1/events', { customer: { id: '42' }, type: 'plan_changed', plan: '4 streams' }, auth);
+    expect(((await c.get('/api/moderation/users/42/notes')).json!.notes as { body: string }[])[0]!.body).toBe('Plan changed to 4 streams.');
+    expect((await portal.post('/api/portal/v1/events', { customer: { id: '42' }, type: 'deleted' }, auth)).status).toBe(400);
+    expect((await portal.post('/api/portal/v1/events', { customer: { email: 'x@example.com' }, type: 'note', detail: 'hi' }, auth)).status).toBe(404);
+
+    // A session cookie isn't a key, and a turned-off key stops working.
+    expect((await c.get('/api/portal/v1')).status).toBe(401);
+    await c.post('/api/billing-portal/api/revoke');
+    expect((await portal.get('/api/portal/v1', auth)).status).toBe(401);
+  });
+
+  it('sends flags to the portal at the chosen level, signed', async () => {
+    const db = openDatabase(':memory:');
+    const sent: { body: Record<string, unknown>; headers: Record<string, string> }[] = [];
+    const fetchImpl = async (_url: string, init?: RequestInit) => {
+      sent.push({ body: JSON.parse(String(init?.body)), headers: init?.headers as Record<string, string> });
+      return new Response('{"message":"ok"}', { status: 200 });
+    };
+    const suspensions = new SuspensionService(db, { note: () => {} }, fetchImpl);
+    suspensions.configure({ url: 'https://billing.example.com/almanac', secret: 'x'.repeat(32) }, 'admin');
+    const monitor = new ActivityMonitor(new MockSessionSource(), 60_000, () => {});
+    const portalApi = new PortalApi(db, { users: new UsersService(db), moderation: new ModerationService(db), health: new PlaybackHealth(db), monitor, suspensions, baseUrl: () => 'https://almanac.example' }, () => {});
+    const event = (severity: 'low' | 'medium' | 'high') => ({
+      reason: 'new' as const,
+      userId: '42',
+      username: 'pike',
+      email: 'pike@example.com',
+      kind: 'bulk_opening' as const,
+      severity,
+      headline: 'Opened 244 different titles in a day without watching them',
+      details: ['Between {{time:2026-11-19T12:33:00.000Z}} and later.'],
+    });
+    expect(await portalApi.flagEvents([event('high')])).toBe(0); // off by default
+    portalApi.setFlagLevel('medium', 'admin');
+    expect(await portalApi.flagEvents([event('low'), event('high')])).toBe(1);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toMatchObject({
+      event: 'flag',
+      customer: { id: '42', username: 'pike', email: 'pike@example.com' },
+      flag: { kind: 'bulk_opening', group: 'ripping', severity: 'high', details: ['Between 2026-11-19T12:33:00.000Z and later.'] },
+      almanac_url: 'https://almanac.example/users/42',
+    });
+    expect(sent[0]!.headers['X-Almanac-Signature']).toMatch(/^sha256=[0-9a-f]{64}$/);
+    expect(() => portalApi.setFlagLevel('loud', 'admin')).toThrow(/Unknown/);
   });
 });
