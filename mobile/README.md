@@ -1,5 +1,8 @@
 # Almanac for iPhone and Android
 
+> [!WARNING]
+> **Work in progress: don't use this yet.** The phone app isn't finished or released, and things will change. Use the Almanac website in the meantime.
+
 The phone app for Almanac, built with React Native and Expo. It connects to any Almanac server (they're all self-hosted), signs in with the same username, password and two-factor code as the website, and covers what admins and mods need on the go:
 
 - **Activity:** who's watching right now, refreshed every 10 seconds

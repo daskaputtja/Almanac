@@ -291,6 +291,9 @@ Use HTTPS for the portal's address: the request carries the customer's email and
 
 ## Phone app
 
+> [!WARNING]
+> **Work in progress: don't use this yet.** The phone app isn't finished or released, and things will change. Use the Almanac website in the meantime.
+
 Native iPhone and Android apps live in [`mobile/`](mobile/README.md), built with React Native and Expo: Activity, Moderation (flags and suspension requests), Users, Server, and push notifications. See [mobile/README.md](mobile/README.md) to run it on your phone and to publish it.
 
 How the server supports it:
