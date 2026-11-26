@@ -300,7 +300,9 @@ export class PortalApi {
   /** Send new, worse or reopened flags at the chosen level to the portal (signed like suspension requests). */
   async flagEvents(events: FlagEvent[]): Promise<number> {
     const level = this.stored().flagLevel;
-    if (level === 'off' || !this.deps.suspensions.portal().url) return 0;
+    const portal = this.deps.suspensions.portal();
+    // Flags are posted to a custom portal; WHMCS has no endpoint for them (its hook file reads Almanac instead).
+    if (level === 'off' || portal.kind !== 'custom' || !portal.ready) return 0;
     const wanted = events.filter((e) => SEVERITY_RANK[e.severity] >= SEVERITY_RANK[level as Severity]);
     for (const e of wanted) {
       try {

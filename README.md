@@ -387,6 +387,30 @@ const { customer } = await res.json();
 if (customer.usage.peakStreams > plan.streams) { /* over their plan's limit */ }
 ```
 
+## WHMCS
+
+If your customers are billed with WHMCS, Almanac can suspend and unsuspend their Silo service through WHMCS's own API, with nothing to install on the WHMCS side. WHMCS then does what it always does when a service is suspended: the status, emails, client area, and the product's provisioning module, which is what actually turns the Silo account off.
+
+> If your Silo product in WHMCS has no provisioning module (a manual product), WHMCS only marks the service suspended; someone still has to turn the Silo account off by hand. Check this before relying on it.
+
+**Set up in WHMCS**
+
+1. **System Settings → Manage API Credentials → API Roles:** make a role allowing `GetClientsProducts`, `GetClientsDetails`, `ModuleSuspend` and `ModuleUnsuspend`.
+2. **Manage API Credentials → API Credentials:** make credentials for an admin user with that role. Note the identifier and secret.
+3. **System Settings → General Settings → Security tab → API IP Access Restriction:** add your Almanac server's IP address (or use an API access key from WHMCS's `configuration.php` instead).
+4. Note the product ID of each Silo plan (**System Settings → Products/Services**, in the product's address as `id=`).
+
+**Set up in Almanac:** **Settings → Billing portal → WHMCS**: WHMCS's address, the identifier and secret, how to match customers (the service's username, which is usually the Silo username, then the client's email), and the Silo product IDs, so domains and other services are never touched. *Test the connection* checks it.
+
+When an admin approves a suspension (or an automatic request), Almanac finds the customer's active Silo service(s) and runs **Module Suspend** with the reason (prefixed `Almanac:`). Lifting it runs **Module Unsuspend**. What WHMCS answered goes in the customer's notes, and a customer WHMCS can't find shows as *Didn't go through* with how Almanac looked, ready to try again.
+
+**The hook file (optional).** [`deploy/whmcs/almanac.php`](deploy/whmcs/almanac.php) goes in WHMCS's `includes/hooks/` folder. Set Almanac's address, a [Portal API](#portal-api) key and your Silo product IDs at the top. It:
+
+- shows an **Almanac panel on each client's summary page** in WHMCS admin: watching now or last watched, plays and hours, peak streams at once, devices, downloads, VPN use, playback, open flags, any pending suspension, and a link to them in Almanac;
+- tells Almanac when **WHMCS** suspends, unsuspends, terminates or changes the package of a Silo service (non-payment, upgrades), so it's in the customer's notes and case file. Suspensions Almanac asked for are skipped, since they're noted already.
+
+Every call to Almanac gives up after a few seconds, so WHMCS is never held up if Almanac is down.
+
 ## Security
 
 - **Sign-in needs two things:** a password and a 6-digit code from an authenticator app (TOTP, RFC 6238). Two-factor authentication can't be turned off.

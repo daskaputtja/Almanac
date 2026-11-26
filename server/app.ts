@@ -616,6 +616,8 @@ export function createApp(
         {
           url: body.url === null ? null : typeof body.url === 'string' ? body.url : undefined,
           secret: body.secret === null ? null : typeof body.secret === 'string' ? body.secret : undefined,
+          kind: body.kind,
+          whmcs: body.whmcs && typeof body.whmcs === 'object' ? (body.whmcs as Record<string, unknown>) : undefined,
         },
         c.get('session').user.username,
       ),

@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { can, type Role } from '../../shared/permissions.js';
 import {
+  type BillingKind,
   type BillingPortalSettings,
   MAX_REASON_LENGTH,
   MIN_REASON_LENGTH,
@@ -12,6 +13,7 @@ import {
 import type { Database } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
 import type { DiscordEmbed } from '../notify/discord.js';
+import { WhmcsClient, type WhmcsMatch, type WhmcsSettings } from './whmcs.js';
 
 const SETTINGS_KEY = 'billingPortal';
 
@@ -34,6 +36,8 @@ export interface SuspensionActor {
 interface Stored {
   url: string | null;
   secret: string | null;
+  kind?: BillingKind;
+  whmcs?: Partial<WhmcsSettings>;
 }
 
 interface Row {
@@ -87,7 +91,19 @@ export class SuspensionService {
 
   portal(): BillingPortalSettings {
     const stored = this.settings.get<Stored>(SETTINGS_KEY);
+    const w = stored?.value.whmcs ?? {};
+    const kind = stored?.value.kind ?? 'custom';
     return {
+      kind,
+      ready: kind === 'whmcs' ? Boolean(w.url && w.identifier && w.secret) : Boolean(stored?.value.url && stored.value.secret),
+      whmcs: {
+        url: w.url ?? null,
+        identifier: w.identifier ?? null,
+        secretSet: Boolean(w.secret),
+        accessKeySet: Boolean(w.accessKey),
+        match: w.match ?? 'username_or_email',
+        productIds: w.productIds ?? [],
+      },
       url: stored?.value.url ?? null,
       secretSet: Boolean(stored?.value.secret),
       updatedBy: stored?.updatedBy ?? null,
@@ -95,8 +111,45 @@ export class SuspensionService {
     };
   }
 
-  configure(input: { url?: string | null; secret?: string | null }, by: string): BillingPortalSettings {
+  configure(
+    input: {
+      url?: string | null;
+      secret?: string | null;
+      kind?: unknown;
+      whmcs?: { url?: unknown; identifier?: unknown; secret?: unknown; accessKey?: unknown; match?: unknown; productIds?: unknown };
+    },
+    by: string,
+  ): BillingPortalSettings {
     const current = this.settings.get<Stored>(SETTINGS_KEY)?.value ?? { url: null, secret: null };
+    let kind: BillingKind = current.kind ?? 'custom';
+    if (input.kind !== undefined) {
+      if (input.kind !== 'custom' && input.kind !== 'whmcs') throw new SuspensionError('Choose a custom portal or WHMCS.');
+      kind = input.kind;
+    }
+    const whmcs: Partial<WhmcsSettings> = { ...(current.whmcs ?? {}) };
+    if (input.whmcs) {
+      const w = input.whmcs;
+      const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+      if (w.url !== undefined) {
+        const value = text(w.url).replace(/\/+$/, '').replace(/\/includes\/api\.php$/i, '');
+        if (value && !/^https?:\/\/[^\s]+$/i.test(value)) throw new SuspensionError('Enter WHMCS’s full address, starting with https://');
+        whmcs.url = value || undefined;
+      }
+      if (w.identifier !== undefined) whmcs.identifier = text(w.identifier) || undefined;
+      // Secrets: only replaced when a new one is given; null clears.
+      if (w.secret !== undefined) whmcs.secret = w.secret === null ? undefined : text(w.secret) || whmcs.secret;
+      if (w.accessKey !== undefined) whmcs.accessKey = w.accessKey === null ? null : text(w.accessKey) || whmcs.accessKey || null;
+      if (w.match !== undefined) {
+        if (!['username', 'email', 'username_or_email'].includes(w.match as string)) throw new SuspensionError('Choose how customers are matched.');
+        whmcs.match = w.match as WhmcsMatch;
+      }
+      if (w.productIds !== undefined) {
+        const raw = Array.isArray(w.productIds) ? w.productIds : String(w.productIds ?? '').split(/[\s,]+/);
+        const ids = raw.map((x) => String(x).trim()).filter(Boolean).map(Number);
+        if (ids.some((n) => !Number.isInteger(n) || n <= 0)) throw new SuspensionError('Product IDs are whole numbers, separated by commas.');
+        whmcs.productIds = [...new Set(ids)];
+      }
+    }
     let url = current.url;
     if (input.url !== undefined) {
       const value = (input.url ?? '').trim();
@@ -109,18 +162,33 @@ export class SuspensionService {
       if (value && value.length < 24) throw new SuspensionError('Use a secret of at least 24 characters. A long random string is best.');
       secret = value || null;
     }
-    this.settings.set(SETTINGS_KEY, { url, secret }, by);
+    this.settings.set(SETTINGS_KEY, { url, secret, kind, whmcs }, by);
     return this.portal();
   }
 
   /** Send any other event to the portal, signed the same way (used for flag alerts). */
   async sendEvent(payload: Record<string, unknown>): Promise<string> {
+    if (this.portal().kind === 'whmcs') throw new SuspensionError('WHMCS can’t receive Almanac’s events.');
     return this.callPortal(payload);
   }
 
   /** Send a harmless "ping" so an admin can check the portal is set up to receive requests. */
   async testPortal(by: string): Promise<string> {
+    const whmcs = this.whmcs();
+    if (whmcs) return whmcs.test();
     return this.callPortal({ event: 'ping', requested_by: by });
+  }
+
+  /** The WHMCS client, when WHMCS is the chosen billing system. */
+  private whmcs(): WhmcsClient | null {
+    const stored = this.settings.get<Stored>(SETTINGS_KEY)?.value;
+    if (stored?.kind !== 'whmcs') return null;
+    const w = stored.whmcs ?? {};
+    if (!w.url || !w.identifier || !w.secret) throw new SuspensionError('WHMCS isn’t fully set up yet. An admin can finish it in Settings → Billing portal.');
+    return new WhmcsClient(
+      { url: w.url, identifier: w.identifier, secret: w.secret, accessKey: w.accessKey ?? null, match: w.match ?? 'username_or_email', productIds: w.productIds ?? [] },
+      this.fetchImpl,
+    );
   }
 
   // --- Requests ----------------------------------------------------------------
@@ -140,7 +208,7 @@ export class SuspensionService {
       .prepare(`SELECT * FROM suspension_requests ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY requested_at DESC LIMIT 200`)
       .all(...params) as unknown as Row[];
     const portal = this.portal();
-    return { requests: rows.map(toRequest), portalConfigured: Boolean(portal.url && portal.secretSet) };
+    return { requests: rows.map(toRequest), portalConfigured: portal.ready };
   }
 
   pendingCount(): number {
@@ -219,7 +287,12 @@ export class SuspensionService {
     let status: SuspensionStatus = 'done';
     let message: string;
     try {
-      message = await this.callPortal({
+      const whmcs = this.whmcs();
+      message = whmcs
+        ? row.action === 'suspend'
+          ? await whmcs.suspend({ username: row.username, email: row.email }, row.reason)
+          : await whmcs.unsuspend({ username: row.username, email: row.email })
+        : await this.callPortal({
         event: row.action,
         request_id: row.id,
         user: { silo_id: row.user_id, username: row.username, email: row.email },

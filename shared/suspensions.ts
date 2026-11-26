@@ -29,7 +29,27 @@ export interface SuspensionsResponse {
   portalConfigured: boolean;
 }
 
+/** How suspensions reach the billing system: a custom portal (signed requests), or WHMCS (its own API). */
+export type BillingKind = 'custom' | 'whmcs';
+
+export interface WhmcsView {
+  /** WHMCS's address. */
+  url: string | null;
+  /** The API credential's identifier (not secret, shown to tell credentials apart). */
+  identifier: string | null;
+  secretSet: boolean;
+  accessKeySet: boolean;
+  /** How a Silo account is matched to a WHMCS service. */
+  match: 'username' | 'email' | 'username_or_email';
+  /** WHMCS product IDs that are Silo plans; empty means any of the customer's services. */
+  productIds: number[];
+}
+
 export interface BillingPortalSettings {
+  kind: BillingKind;
+  /** Suspensions can be sent: the chosen kind is fully set up. */
+  ready: boolean;
+  whmcs: WhmcsView;
   /** The portal's address, shown in full (it isn't secret). */
   url: string | null;
   /** True once a signing secret is saved; the secret itself is never shown again. */

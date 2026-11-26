@@ -374,9 +374,41 @@ export function BillingPortalSection() {
     <section className="rounded-xl border border-line bg-panel p-5">
       <h2 className="font-semibold">Billing portal</h2>
       <p className="mt-1 text-sm text-ink-muted">
-        Suspensions go through your billing portal, which turns the Silo account off and back on, as it does for non-payment. Almanac sends it a signed
-        request; the portal’s side is described in the README’s “Billing portal” section.
+        Suspensions go through your billing system, which turns the Silo account off and back on, as it does for non-payment.
       </p>
+      <div className="mt-3 flex rounded-lg border border-line bg-canvas p-0.5 text-sm" role="group" aria-label="Billing system">
+        {(
+          [
+            ['custom', 'Custom portal'],
+            ['whmcs', 'WHMCS'],
+          ] as const
+        ).map(([kind, label]) => (
+          <button
+            key={kind}
+            type="button"
+            aria-pressed={settings.kind === kind}
+            disabled={busy}
+            onClick={() =>
+              void (async () => {
+                setMessage(null);
+                try {
+                  setSettings(await api<BillingPortalSettings>('/api/billing-portal', { method: 'POST', body: { kind } }));
+                } catch (err) {
+                  setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Couldn’t save.' });
+                }
+              })()
+            }
+            className={`flex-1 rounded-md px-3 py-1.5 ${settings.kind === kind ? 'bg-panel-raised font-medium text-ink' : 'text-ink-muted hover:text-ink'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {settings.kind === 'whmcs' ? (
+        <WhmcsForm settings={settings} onSaved={setSettings} />
+      ) : (
+      <>
+      <p className="mt-3 text-sm text-ink-muted">Almanac sends your portal a signed request; the portal’s side is described in the README’s “Billing portal” section.</p>
       <form onSubmit={save} className="mt-4 space-y-3">
         <label className="block text-sm">
           <span className="font-medium">Address Almanac sends requests to</span>
@@ -414,13 +446,121 @@ export function BillingPortalSection() {
         {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
         {settings.updatedBy && <p className="text-xs text-ink-faint">Last changed by {settings.updatedBy} {settings.updatedAt ? formatWhen(settings.updatedAt) : ''}</p>}
       </form>
-      <PortalApiSettingsPart portalReady={Boolean(settings.url && settings.secretSet)} />
+      </>
+      )}
+      <PortalApiSettingsPart portalReady={settings.ready} kind={settings.kind} />
     </section>
   );
 }
 
+/** WHMCS: Almanac calls WHMCS's own API to suspend and unsuspend the customer's Silo service. */
+function WhmcsForm({ settings, onSaved }: { settings: BillingPortalSettings; onSaved: (s: BillingPortalSettings) => void }) {
+  const w = settings.whmcs;
+  const [url, setUrl] = useState(w.url ?? '');
+  const [identifier, setIdentifier] = useState(w.identifier ?? '');
+  const [secret, setSecret] = useState('');
+  const [accessKey, setAccessKey] = useState('');
+  const [match, setMatch] = useState(w.match);
+  const [productIds, setProductIds] = useState(w.productIds.join(', '));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const whmcs: Record<string, unknown> = { url, identifier, match, productIds };
+      if (secret) whmcs.secret = secret;
+      if (accessKey) whmcs.accessKey = accessKey;
+      onSaved(await api<BillingPortalSettings>('/api/billing-portal', { method: 'POST', body: { whmcs } }));
+      setSecret('');
+      setAccessKey('');
+      setMessage({ ok: true, text: 'Saved.' });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Couldn’t save.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const test = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const r = await api<{ ok: boolean; message: string }>('/api/billing-portal/test', { method: 'POST' });
+      setMessage({ ok: r.ok, text: r.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={(e) => void save(e)} className="mt-4 space-y-3">
+      <p className="text-sm text-ink-muted">
+        When an admin approves a suspension, Almanac finds the customer’s Silo service in WHMCS and runs WHMCS’s own <em>Module Suspend</em> (or <em>Unsuspend</em>),
+        so WHMCS’s provisioning module turns the Silo account off. In WHMCS: <strong className="font-medium text-ink">System Settings → Manage API Credentials</strong>, make
+        a role allowing <code>GetClientsProducts</code>, <code>GetClientsDetails</code>, <code>ModuleSuspend</code> and <code>ModuleUnsuspend</code>, then
+        credentials for it, and allow this server’s IP under <strong className="font-medium text-ink">General Settings → Security</strong>.
+      </p>
+      <label className="block text-sm">
+        <span className="font-medium">WHMCS address</span>
+        <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://billing.example.com" className={`${input} mt-1 w-full`} />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="font-medium">API identifier</span>
+          <input value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="off" className={`${input} mt-1 w-full font-mono`} />
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">API secret</span> <span className="text-xs text-ink-muted">{w.secretSet ? '(saved)' : '(not set)'}</span>
+          <input
+            type="password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            autoComplete="off"
+            placeholder={w.secretSet ? 'Leave empty to keep it' : ''}
+            className={`${input} mt-1 w-full font-mono`}
+          />
+        </label>
+      </div>
+      <label className="block text-sm">
+        <span className="font-medium">API access key</span> <span className="text-xs text-ink-muted">(optional{w.accessKeySet ? ', saved' : ''})</span>
+        <input type="password" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} autoComplete="off" className={`${input} mt-1 w-full font-mono`} />
+        <span className="mt-1 block text-xs text-ink-faint">Only if you’d rather not allow this server’s IP: the access key set in WHMCS’s configuration.php.</span>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="font-medium">Match Silo accounts by</span>
+          <select value={match} onChange={(e) => setMatch(e.target.value as typeof match)} className={`${input} mt-1 w-full`}>
+            <option value="username_or_email">Service username, then client email</option>
+            <option value="username">Service username only</option>
+            <option value="email">Client email only</option>
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="font-medium">Silo product IDs</span>
+          <input value={productIds} onChange={(e) => setProductIds(e.target.value)} placeholder="e.g. 7, 8" className={`${input} mt-1 w-full`} />
+          <span className="mt-1 block text-xs text-ink-faint">The WHMCS products that are Silo plans, so other services (domains, hosting) are never touched.</span>
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={busy} className={primary}>
+          Save
+        </button>
+        <button type="button" disabled={busy || !settings.ready} className={secondary} onClick={() => void test()}>
+          Test the connection
+        </button>
+      </div>
+      {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+      {!w.productIds.length && settings.ready && (
+        <p className="text-xs text-[#fab219]">No product IDs set: every service the customer has would be suspended. Add your Silo products’ IDs.</p>
+      )}
+    </form>
+  );
+}
+
 /** The other direction: a key the portal uses to call Almanac, and which flags are sent to it. */
-function PortalApiSettingsPart({ portalReady }: { portalReady: boolean }) {
+function PortalApiSettingsPart({ portalReady, kind }: { portalReady: boolean; kind: BillingPortalSettings['kind'] }) {
   const [settings, setSettings] = useState<PortalApiSettings | null>(null);
   const [newKey, setNewKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -495,6 +635,12 @@ function PortalApiSettingsPart({ portalReady }: { portalReady: boolean }) {
           </button>
         )}
       </div>
+      {kind === 'whmcs' ? (
+        <p className="text-sm text-ink-muted">
+          For WHMCS, the README’s “WHMCS” section has a hook file that uses this key: it shows Almanac’s summary on each client’s page in WHMCS and tells Almanac
+          when WHMCS suspends, unsuspends or changes a Silo service.
+        </p>
+      ) : (
       <label className="block text-sm">
         <span className="font-medium">Send new flags to the portal</span>
         <select
@@ -520,6 +666,7 @@ function PortalApiSettingsPart({ portalReady }: { portalReady: boolean }) {
             : 'Needs the address and signing secret above: flags are sent the same way as suspension requests.'}
         </span>
       </label>
+      )}
       {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
     </div>
   );
