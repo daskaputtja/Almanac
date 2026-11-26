@@ -811,6 +811,16 @@ function StaffCard({ staff, onChange }: { staff: NonNullable<NotificationsRespon
             />
             Alert when streams drop much more than usual
           </label>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={staff.capacity}
+              disabled={busy}
+              onChange={(e) => void act(() => api('/api/notifications/staff', { method: 'POST', body: { capacity: e.target.checked } }), 'Saved.')}
+              className="h-4 w-4 accent-[var(--color-accent)]"
+            />
+            Alert when the server is running out of room
+          </label>
           <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api('/api/notifications/staff/test', { method: 'POST' }), 'Sent a test alert. Check the channel in Discord.')}>
             Send test
           </button>

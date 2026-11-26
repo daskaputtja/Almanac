@@ -46,3 +46,33 @@ export function episodeCode(season: number | null, episode: number | null): stri
   if (season == null || episode == null) return null;
   return `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
 }
+
+/** Friendly platform names (a copy of shared/platform.ts: the app can only import types from outside its folder). */
+const PLATFORM_LABELS: Record<string, string> = {
+  'android-tv': 'Android TV',
+  'fire-tv': 'Fire TV',
+  firetv: 'Fire TV',
+  'google-tv': 'Google TV',
+  webos: 'webOS',
+  tizen: 'Tizen',
+  xbox: 'Xbox',
+  playstation: 'PlayStation',
+  chromecast: 'Chromecast',
+  android: 'Android',
+  ios: 'iOS',
+  ipados: 'iPadOS',
+  tvos: 'tvOS',
+  macos: 'macOS',
+  web: 'Web',
+  roku: 'Roku',
+  windows: 'Windows',
+  linux: 'Linux',
+};
+
+export function platformLabel(platform: string | null): string | null {
+  if (!platform) return null;
+  const known = PLATFORM_LABELS[platform.toLowerCase()];
+  if (known) return known;
+  const words = platform.replace(/[-_]/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

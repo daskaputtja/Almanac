@@ -37,6 +37,8 @@ import { MockServerSource } from '../server/silo/mock.js';
 import { MockAccountSource, MockCatalogSource, MockHistorySource, MockSessionSource } from '../server/silo/mock.js';
 import { StatsService } from '../server/stats/stats.js';
 import { UsersService } from '../server/users/users.js';
+import { CapacityService } from '../server/capacity/capacity.js';
+import { PlaybackHealth } from '../server/health/health.js';
 
 describe('TOTP', () => {
   // RFC 6238 appendix B test vectors (SHA-1, 8 digits).
@@ -133,6 +135,8 @@ function makeApp() {
       metadata: new MetadataService(db, failingFetch),
       accounts: new AccountsService(db, new MockAccountSource(), () => {}),
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
+      capacity: new CapacityService(db, null, () => {}),
+      health: new PlaybackHealth(db),
       staff: new StaffAlerts(db, failingFetch, () => {}),
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),
       board: new LibraryBoard(db, new LibraryService(db, catalogSync), failingFetch, () => {}),
@@ -400,7 +404,7 @@ describe('roles', () => {
     const { c } = await setUp();
     const state = (await c.get('/api/auth/state')).json!;
     expect(state.role).toBe('admin');
-    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags', 'shareRecaps', 'requestSuspension', 'reviewSuspension', 'configureBilling']);
+    expect(state.permissions).toEqual(['viewIpAddresses', 'manageAccounts', 'manageNotifications', 'moderate', 'manageAllNotes', 'configureFlags', 'shareRecaps', 'requestSuspension', 'reviewSuspension', 'configureBilling', 'configureCapacity']);
   });
 
   it('tells a mod what they can do', async () => {

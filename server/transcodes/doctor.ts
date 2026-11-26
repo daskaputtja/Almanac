@@ -12,7 +12,7 @@ const COUNTED = '(watched_seconds IS NULL OR watched_seconds >= 30)';
 const MIN_CONVERTED_FOR_SUGGESTIONS = 30;
 
 /** Plain-English names for Silo's reasons, used in suggestions. */
-const REASON_TEXT: Record<string, string> = {
+export const REASON_TEXT: Record<string, string> = {
   video_codec_unsupported: 'the player can’t decode the video',
   video_capability_unconfirmed: 'the player didn’t confirm it supports the video',
   dynamic_range_unsupported: 'the player can’t show HDR',

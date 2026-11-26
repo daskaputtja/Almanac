@@ -58,6 +58,8 @@ export interface StaffAlertsSettings {
   /** The staff webhook with its secret hidden, or null if none is set. */
   webhookHint: string | null;
   reliability: boolean;
+  /** Post when the server is running out of room (see Server → Capacity). */
+  capacity: boolean;
   flagLevel: FlagAlertLevel;
   lastAlertAt: string | null;
   alerting: boolean;

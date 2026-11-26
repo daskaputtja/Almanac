@@ -49,23 +49,7 @@ export function reasonLabel(reason: string): string {
   return REASON_LABELS[reason] ?? sentenceCase(reason.replace(/_/g, ' '));
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  'android-tv': 'Android TV',
-  android: 'Android',
-  ios: 'iOS',
-  ipados: 'iPadOS',
-  tvos: 'tvOS',
-  macos: 'macOS',
-  web: 'Web',
-  roku: 'Roku',
-  windows: 'Windows',
-  linux: 'Linux',
-};
-
-export function platformLabel(platform: string | null): string | null {
-  if (!platform) return null;
-  return PLATFORM_LABELS[platform.toLowerCase()] ?? sentenceCase(platform.replace(/[-_]/g, ' '));
-}
+export { platformLabel } from '../../../shared/platform';
 
 export function channelsLabel(channels: number | null, layout?: string | null): string | null {
   const named = layout?.match(/\d\.\d/)?.[0];

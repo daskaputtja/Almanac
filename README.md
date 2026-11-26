@@ -78,9 +78,10 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 
 ### Server ✅
 - **Load:** streams and bandwidth over the last day, week, month, 3 months or year, with peaks, and a heatmap of a typical week so you can plan maintenance in the quiet hours
+- **Capacity:** each evening's peak streams, upload bandwidth and transcodes over the last 8 weeks, the trend, and (once you enter what your servers can handle) when busy evenings will reach those limits. One unusual night doesn't skew it. Staff Discord and the phone app are told as a limit gets close
 - **Nodes:** each Silo node with its status, version, streams and bandwidth
 - **Transcode doctor:** why streams are being converted, which players and files cause it most, and suggestions for fixing it
-- **Reliability:** how many streams drop (the player stopped answering mid-stream) or stop within 10 seconds, compared with what's usual, by player and by playback method, alongside Silo's count of streams watched to the end. Admins can have a staff Discord channel alerted when drops jump, and when new account flags appear (with the account's email and a link, never IP addresses)
+- **Reliability:** how many streams drop (the player stopped answering mid-stream) or stop within 10 seconds, compared with what's usual, by player and by playback method, alongside Silo's count of streams watched to the end. **Viewers having a rough time** lists people whose streams drop or stop far more than everyone else's, or are nearly all converted, says which device it is, whether that app struggles for everyone or it's more likely their connection, and what might help. Each user's page has the same breakdown. Admins can have a staff Discord channel alerted when drops jump, and when new account flags appear (with the account's email and a link, never IP addresses)
 - **Downloads:** what people have downloaded in Silo's apps for offline viewing, the biggest downloaders, and what's on devices now. Almanac keeps its own record, so deleted downloads still count
 
 ### Discord notifications ✅ (admins)
@@ -353,6 +354,8 @@ server/            The Almanac server (Hono on Node.js)
   trending/        Trending titles
   accounts/        Offline downloads and signed-in devices, copied from Silo
   reliability/     How reliably streams play, and the staff alert
+  capacity/        Evening peaks, their trend, and when they reach the limits
+  health/          Viewers whose streams are going badly, and why
   geo/             Looking up where viewers are
   notify/          Discord posts for recently added, and TMDB/TVDB lookups
   users/           Accounts combined with their play history

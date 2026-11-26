@@ -27,6 +27,8 @@ import { ShareError, type RecapShares } from './recap/shares.js';
 import type { GeoService } from './geo/geo.js';
 import type { AccountsService } from './accounts/accounts.js';
 import type { ReliabilityService } from './reliability/reliability.js';
+import { CapacityError, type CapacityService } from './capacity/capacity.js';
+import type { PlaybackHealth } from './health/health.js';
 import type { StaffAlerts } from './notify/staff.js';
 import type { LibraryBoard } from './notify/board.js';
 import type { StatusBoard } from './notify/status.js';
@@ -61,6 +63,8 @@ export interface AppServices {
   metadata: MetadataService;
   accounts: AccountsService;
   reliability: ReliabilityService;
+  capacity: CapacityService;
+  health: PlaybackHealth;
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
@@ -128,7 +132,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard, push }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -275,10 +279,21 @@ export function createApp(
   app.get('/api/users/:id', (c) => {
     const found = users.get(c.req.param('id'));
     if (!found) return c.json({ error: 'No such user' }, 404);
-    const user = { ...found, downloads: accounts.forUser(found.id, seesIps(c)), registeredDevices: accounts.devicesForUser(found.id) };
+    const user = { ...found, downloads: accounts.forUser(found.id, seesIps(c)), registeredDevices: accounts.devicesForUser(found.id), health: health.forUser(found.id) };
     return c.json(seesIps(c) ? user : userWithoutIps(user));
   });
   app.get('/api/downloads', (c) => c.json(accounts.overview(seesIps(c))));
+  app.get('/api/server/capacity', (c) => c.json(capacity.report()));
+  app.post('/api/server/capacity', requirePermission('configureCapacity'), async (c) => {
+    const body = await jsonBody(c);
+    try {
+      return c.json(capacity.setLimits(body, c.get('session').user.username));
+    } catch (err) {
+      if (err instanceof CapacityError) return c.json({ error: err.message }, 400);
+      throw err;
+    }
+  });
+  app.get('/api/server/health', (c) => c.json(health.overview()));
   app.get('/api/server/reliability', async (c) => {
     const range = c.req.query('range') ?? '7d';
     return c.json(await reliability.report((range in RELIABILITY_RANGES ? range : '7d') as ReliabilityRange));
@@ -428,6 +443,7 @@ export function createApp(
         {
           webhookUrl: body.webhookUrl === null ? null : typeof body.webhookUrl === 'string' ? body.webhookUrl : undefined,
           reliability: typeof body.reliability === 'boolean' ? body.reliability : undefined,
+          capacity: typeof body.capacity === 'boolean' ? body.capacity : undefined,
           flagLevel: typeof body.flagLevel === 'string' ? (body.flagLevel as 'off' | 'high' | 'medium' | 'low') : undefined,
           // Remember Almanac's own address for links in posts.
           baseUrl: c.req.header('origin') ?? null,

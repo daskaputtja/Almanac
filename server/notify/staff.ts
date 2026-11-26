@@ -12,6 +12,7 @@ const KEY = 'staffAlerts';
 interface Stored {
   webhookUrl: string | null;
   reliability: boolean;
+  capacity: boolean;
   flagLevel: FlagAlertLevel;
   /** Almanac's own address, from the browser that saved these settings, for links in posts. */
   baseUrl: string | null;
@@ -44,7 +45,7 @@ export class StaffAlerts {
   }
 
   private stored(): Stored {
-    return { webhookUrl: null, reliability: true, flagLevel: 'medium', baseUrl: null, ...(this.settings.get<Stored>(KEY)?.value ?? {}) };
+    return { webhookUrl: null, reliability: true, capacity: true, flagLevel: 'medium', baseUrl: null, ...(this.settings.get<Stored>(KEY)?.value ?? {}) };
   }
 
   state(): AlertState {
@@ -61,13 +62,14 @@ export class StaffAlerts {
     return {
       webhookHint: s.webhookUrl ? webhookHint(s.webhookUrl) : null,
       reliability: s.reliability,
+      capacity: s.capacity,
       flagLevel: s.flagLevel,
       lastAlertAt: state.lastAlertAt,
       alerting: state.alerting,
     };
   }
 
-  update(input: { webhookUrl?: string | null; reliability?: boolean; flagLevel?: FlagAlertLevel; baseUrl?: string | null }, by: string): StaffAlertsSettings {
+  update(input: { webhookUrl?: string | null; reliability?: boolean; capacity?: boolean; flagLevel?: FlagAlertLevel; baseUrl?: string | null }, by: string): StaffAlertsSettings {
     const current = this.stored();
     let webhookUrl = current.webhookUrl;
     if (input.webhookUrl === null || input.webhookUrl === '') webhookUrl = null;
@@ -78,7 +80,7 @@ export class StaffAlerts {
     }
     if (input.flagLevel !== undefined && !['off', 'high', 'medium', 'low'].includes(input.flagLevel)) throw new NotifyError('Unknown flag alert level.');
     const baseUrl = input.baseUrl && /^https?:\/\/[^/\s]+$/.test(input.baseUrl) ? input.baseUrl : current.baseUrl;
-    const next: Stored = { webhookUrl, reliability: input.reliability ?? current.reliability, flagLevel: input.flagLevel ?? current.flagLevel, baseUrl };
+    const next: Stored = { webhookUrl, reliability: input.reliability ?? current.reliability, capacity: input.capacity ?? current.capacity, flagLevel: input.flagLevel ?? current.flagLevel, baseUrl };
     this.settings.set(KEY, next, by);
     return this.view();
   }
@@ -95,7 +97,7 @@ export class StaffAlerts {
   }
 
   /** Is this kind of alert turned on, with somewhere to send it? */
-  wants(kind: 'reliability'): boolean {
+  wants(kind: 'reliability' | 'capacity'): boolean {
     const s = this.stored();
     return Boolean(s.webhookUrl) && s[kind];
   }

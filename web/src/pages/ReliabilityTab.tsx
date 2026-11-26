@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { RELIABILITY_RANGES, type ReliabilityGroup, type ReliabilityRange, type ReliabilityResponse } from '../../../shared/reliability';
 import { LineChart } from '../components/charts/LineChart';
+import { RoughTimeList } from '../components/PlaybackHealth';
 import { Stat } from '../components/StatsSections';
 import { api } from '../lib/api';
 import { formatRate, platformLabel } from '../lib/format';
@@ -97,6 +98,8 @@ export function ReliabilityTab({ search }: { search: string }) {
               }
             />
           </section>
+
+          <RoughTimeList />
 
           <div className="grid gap-5 xl:grid-cols-[3fr_2fr]">
             <GroupTable title="By player" groups={data.players} overall={data.totals} showPlatform />

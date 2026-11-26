@@ -17,6 +17,7 @@ import {
   useStats,
 } from '../components/StatsSections';
 import { NotesAndTags } from '../components/NotesAndTags';
+import { UserPlaybackCard } from '../components/PlaybackHealth';
 import { DownloadList } from './DownloadsTab';
 import { SuspensionPanel } from '../components/Suspensions';
 import { WhereSection } from '../components/WhereSection';
@@ -161,6 +162,8 @@ export function UserPage({ userId }: { userId: string }) {
           </div>
         </div>
       )}
+
+      {user?.health && <UserPlaybackCard health={user.health} />}
 
       <WhereSection period={period} userId={userId} title="Where they watch" />
 

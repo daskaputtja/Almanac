@@ -6,13 +6,15 @@ import { Stat } from '../components/StatsSections';
 import { api } from '../lib/api';
 import { formatWhen } from '../lib/format';
 import { Link, navigate, useLocation } from '../lib/router';
+import { CapacityTab } from './CapacityTab';
 import { DownloadsTab } from './DownloadsTab';
 import { ReliabilityTab } from './ReliabilityTab';
 import { TranscodesTab } from './TranscodesTab';
 
-type Tab = 'load' | 'nodes' | 'transcodes' | 'reliability' | 'downloads';
+type Tab = 'load' | 'capacity' | 'nodes' | 'transcodes' | 'reliability' | 'downloads';
 const TABS: [Tab, string][] = [
   ['load', 'Load'],
+  ['capacity', 'Capacity'],
   ['nodes', 'Nodes'],
   ['transcodes', 'Transcodes'],
   ['reliability', 'Reliability'],
@@ -29,7 +31,7 @@ export function ServerPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-semibold">Server</h1>
-        <p className="text-sm text-ink-muted">How hard Silo is working, node by node, what makes it transcode, how reliably streams play, and what people download.</p>
+        <p className="text-sm text-ink-muted">How hard Silo is working, whether it’s running out of room, node by node, what makes it transcode, how reliably streams play, and what people download.</p>
       </div>
       <nav
         ref={(nav) => {
@@ -56,6 +58,7 @@ export function ServerPage() {
         ))}
       </nav>
       {tab === 'load' && <LoadTab search={search} />}
+      {tab === 'capacity' && <CapacityTab />}
       {tab === 'nodes' && <NodesTab />}
       {tab === 'transcodes' && <TranscodesTab />}
       {tab === 'reliability' && <ReliabilityTab search={search} />}

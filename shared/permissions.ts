@@ -37,7 +37,9 @@ export type Permission =
   /** Approve or reject suspension requests, and suspend or unsuspend directly. */
   | 'reviewSuspension'
   /** Connect Almanac to the billing portal. */
-  | 'configureBilling';
+  | 'configureBilling'
+  /** Set the server's limits for the capacity forecast. */
+  | 'configureCapacity';
 
 const GRANTS: Record<Permission, Role[]> = {
   viewIpAddresses: ['admin'],
@@ -50,6 +52,7 @@ const GRANTS: Record<Permission, Role[]> = {
   requestSuspension: ['admin', 'mod'],
   reviewSuspension: ['admin'],
   configureBilling: ['admin'],
+  configureCapacity: ['admin'],
 };
 
 export function can(role: Role | null | undefined, permission: Permission): boolean {

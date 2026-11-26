@@ -15,7 +15,8 @@ export interface LineSeries<K extends string> {
 export interface LinePoint<K extends string> {
   /** Milliseconds since the epoch. */
   t: number;
-  values: Record<K, number>;
+  /** A series without a value at a point is not drawn there (for example a forecast that starts today). */
+  values: Partial<Record<K, number>>;
 }
 
 interface Props<K extends string> {
@@ -56,7 +57,20 @@ export function LineChart<K extends string>({
   const x = (t: number) => MARGIN.left + (t1 === t0 ? innerW / 2 : ((t - t0) / (t1 - t0)) * innerW);
   const y = (v: number) => MARGIN.top + innerH - (v / top) * innerH;
 
-  const path = (key: K) => points.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.values[key] ?? 0).toFixed(1)}`).join('');
+  const path = (key: K) => {
+    let pen = 'M';
+    let out = '';
+    for (const p of points) {
+      const v = p.values[key];
+      if (v === undefined) {
+        pen = 'M';
+        continue;
+      }
+      out += `${pen}${x(p.t).toFixed(1)},${y(v).toFixed(1)}`;
+      pen = 'L';
+    }
+    return out;
+  };
   const labelCount = Math.max(2, Math.floor(innerW / 110));
   // With only a few points, label the points themselves; never repeat a label.
   const labelTimes = (
@@ -143,7 +157,7 @@ export function LineChart<K extends string>({
             {activePoint && (
               <g>
                 <line x1={x(activePoint.t)} x2={x(activePoint.t)} y1={MARGIN.top} y2={y(0)} stroke="var(--color-ink-muted)" strokeWidth={1} />
-                {series.map((s) => (
+                {series.filter((s) => activePoint.values[s.key] !== undefined).map((s) => (
                   <circle
                     key={s.key}
                     cx={x(activePoint.t)}
@@ -166,7 +180,7 @@ export function LineChart<K extends string>({
           >
             <p className="mb-1.5 font-medium text-ink-muted">{formatTime(activePoint.t)}</p>
             <ul className="space-y-1">
-              {series.map((s) => (
+              {series.filter((s) => activePoint.values[s.key] !== undefined).map((s) => (
                 <li key={s.key} className="flex items-center gap-2">
                   <span className="h-0.5 w-3 rounded-full" style={{ background: s.color }} aria-hidden="true" />
                   <span className="font-semibold tabular-nums text-ink">{formatValue(activePoint.values[s.key] ?? 0)}</span>

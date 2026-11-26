@@ -1,3 +1,4 @@
+import type { UserHealthResponse } from './health.js';
 import type { RegisteredDevice, UserDownloads } from './accounts.js';
 
 export interface UserSummary {
@@ -37,4 +38,6 @@ export interface UserDetail extends UserSummary {
   downloads: UserDownloads;
   /** Devices signed in to the account in Silo. */
   registeredDevices: RegisteredDevice[];
+  /** How playback has gone for them over the last 30 days; null if they've played nothing measurable. */
+  health: UserHealthResponse | null;
 }

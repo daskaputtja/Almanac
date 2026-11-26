@@ -30,6 +30,8 @@ import { TrendingService } from './trending/trending.js';
 import { StatsService } from './stats/stats.js';
 import { UsersService } from './users/users.js';
 import { ModerationService } from './moderation/service.js';
+import { CapacityService } from './capacity/capacity.js';
+import { PlaybackHealth } from './health/health.js';
 
 let config;
 try {
@@ -137,6 +139,10 @@ accounts.start();
 // How reliably streams play, with an optional alert to a staff Discord channel.
 const staff = new StaffAlerts(db);
 const reliability = new ReliabilityService(db, serverSource, staff);
+// Will evening peaks outgrow the server? From the load history, against limits set in Server → Capacity.
+const capacity = new CapacityService(db, staff);
+// Viewers whose streams drop, won't start, or are nearly all converted.
+const health = new PlaybackHealth(db);
 // A Discord message listing every library and how much is in it, edited hourly.
 const board = new LibraryBoard(db, library);
 board.start();
@@ -148,6 +154,7 @@ statusBoard.start();
 const push = new PushService(db, fetch, console.log, process.env.EXPO_ACCESS_TOKEN?.trim() || null);
 const quietly = (p: Promise<unknown>) => void p.catch((err) => console.log(`Push notification not sent: ${err instanceof Error ? err.message : String(err)}`));
 reliability.onAlert = (message) => quietly(push.serverAlert(message));
+capacity.onAlert = (message) => quietly(push.serverAlert(message));
 statusBoard.onChange = (changes) => {
   for (const m of changes) {
     quietly(push.serverAlert({ title: m.state === 'down' ? `${m.name} is down` : `${m.name} is back up`, body: m.state === 'down' ? 'Uptime Kuma says it isn’t answering.' : 'Uptime Kuma says it’s answering again.', path: '/server' }));
@@ -167,8 +174,9 @@ moderation.onFlagEvents((events) => {
   quietly(push.flagEvents(events));
 });
 reliability.start();
+capacity.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, staff, suspensions, board, statusBoard, push });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, staff, suspensions, board, statusBoard, push });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);
@@ -194,6 +202,7 @@ function shutdown() {
   board.stop();
   statusBoard.stop();
   reliability.stop();
+  capacity.stop();
   server.close(() => {
     db.close();
     process.exit(0);

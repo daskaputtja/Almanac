@@ -4,12 +4,13 @@ import { Linking, Text, TextInput, View } from 'react-native';
 import type { HistoryPage } from '../../../../shared/history';
 import type { FlagsResponse, UserNote } from '../../../../shared/moderation';
 import type { SuspensionsResponse } from '../../../../shared/suspensions';
+import type { UserHealthResponse } from '../../../../shared/health';
 import type { UserDetail } from '../../../../shared/users';
 import { FlagCard, RequestCard } from '../../components/flags';
-import { Button, Card, ErrorText, Label, Muted, Screen, Stat } from '../../components/ui';
+import { Button, Card, ErrorText, Label, Muted, Pill, Screen, Stat } from '../../components/ui';
 import { ApiError, api } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
-import { episodeCode, formatBytes, formatDuration, formatWhen } from '../../lib/format';
+import { episodeCode, formatBytes, formatDuration, formatWhen, platformLabel } from '../../lib/format';
 import { colors, radius, space } from '../../lib/theme';
 
 /** One account: flags, notes, suspension, downloads, devices and recent plays. */
@@ -93,6 +94,8 @@ export default function UserScreen() {
           ) : null}
 
           {can('moderate') ? <Notes userId={user.id} notes={notes} onChanged={() => void load()} /> : null}
+
+          {user.health ? <PlaybackCard health={user.health} /> : null}
 
           <Card>
             <Label>Offline downloads</Label>
@@ -240,6 +243,44 @@ function Notes({ userId, notes, onChanged }: { userId: string; notes: UserNote[]
       <TextInput value={text} onChangeText={setText} placeholder="Add a note for other admins and mods" placeholderTextColor={colors.faint} multiline style={inputStyle} />
       {error ? <ErrorText>{error}</ErrorText> : null}
       <Button title="Add note" kind="secondary" onPress={() => void add()} busy={busy} disabled={!text.trim()} />
+    </Card>
+  );
+}
+
+const SEVERITY = { high: { text: 'Rough', color: '#d03b3b' }, medium: { text: 'Struggling', color: '#fab219' }, low: { text: 'Worth a look', color: '#737373' } } as const;
+
+/** How playback has gone for them over 30 days, and what might help. */
+function PlaybackCard({ health }: { health: UserHealthResponse }) {
+  const { user, baseline } = health;
+  const pct = (n: number) => `${Math.round(n * 100)}%`;
+  const rate = (n: number) => pct(user.plays ? n / user.plays : 0);
+  return (
+    <Card>
+      <Label>Playback, last {health.days} days</Label>
+      <Muted small>
+        {user.plays} streams · {rate(user.dropped)} dropped (usually {pct(baseline.droppedRate)}) · {rate(user.transcodes)} converted (usually {pct(baseline.transcodeRate)})
+      </Muted>
+      {!health.enoughPlays ? <Muted>Too few streams to say whether anything’s wrong.</Muted> : null}
+      {health.enoughPlays && !user.issues.length ? <Muted>Nothing stands out: their streams are going as well as everyone else’s.</Muted> : null}
+      {user.issues.map((i) => (
+        <View key={i.kind} style={{ gap: space.xs, paddingTop: space.sm }}>
+          <Pill text={SEVERITY[i.severity].text} color={SEVERITY[i.severity].color} />
+          <Text style={{ color: colors.ink, fontWeight: '600' }}>{i.headline}</Text>
+          {i.advice.map((a) => (
+            <Muted key={a} small>
+              • {a}
+            </Muted>
+          ))}
+        </View>
+      ))}
+      <View style={{ paddingTop: space.sm }}>
+        {user.players.slice(0, 6).map((p) => (
+          <Muted key={`${p.label}|${p.platform ?? ''}`} small>
+            {p.label}
+            {p.platform ? ` (${platformLabel(p.platform)})` : ''} · {p.plays} streams · {pct(p.dropped / p.plays)} dropped
+          </Muted>
+        ))}
+      </View>
     </Card>
   );
 }
