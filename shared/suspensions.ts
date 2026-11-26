@@ -37,3 +37,13 @@ export interface BillingPortalSettings {
   updatedBy: string | null;
   updatedAt: string | null;
 }
+
+/** Checks that can reach "Serious", and so can file a suspension request automatically. */
+export const AUTO_REQUEST_KINDS: import('./moderation.js').FlagKind[] = ['heavy_downloads', 'bulk_opening', 'nonstop', 'heavy_daily', 'concurrent_networks'];
+
+/** Which serious flags file a suspension request by themselves (an admin still approves it). */
+export interface AutoRequestSettings {
+  kinds: import('./moderation.js').FlagKind[];
+  updatedBy: string | null;
+  updatedAt: string | null;
+}

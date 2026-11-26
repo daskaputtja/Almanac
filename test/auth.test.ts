@@ -40,6 +40,7 @@ import { UsersService } from '../server/users/users.js';
 import { CapacityService } from '../server/capacity/capacity.js';
 import { PlaybackHealth } from '../server/health/health.js';
 import { PortalApi } from '../server/portal/portal.js';
+import { AutoRequests } from '../server/suspensions/auto.js';
 
 describe('TOTP', () => {
   // RFC 6238 appendix B test vectors (SHA-1, 8 digits).
@@ -138,6 +139,7 @@ function makeApp() {
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       capacity: new CapacityService(db, null, () => {}),
       health: new PlaybackHealth(db),
+      autoRequests: new AutoRequests(db, new SuspensionService(db, { note: () => {} }, failingFetch), () => {}),
       portalApi: new PortalApi(db, { users: new UsersService(db), moderation: new ModerationService(db), health: new PlaybackHealth(db), monitor, suspensions: new SuspensionService(db, { note: () => {} }, failingFetch), baseUrl: () => null }, () => {}),
       staff: new StaffAlerts(db, failingFetch, () => {}),
       suspensions: new SuspensionService(db, { note: () => {} }, failingFetch),

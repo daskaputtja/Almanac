@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { MIN_REASON_LENGTH, type BillingPortalSettings, type SuspensionAction, type SuspensionRequest, type SuspensionsResponse } from '../../../shared/suspensions';
+import { AUTO_REQUEST_KINDS, type AutoRequestSettings, MIN_REASON_LENGTH, type BillingPortalSettings, type SuspensionAction, type SuspensionRequest, type SuspensionsResponse } from '../../../shared/suspensions';
 import type { PortalApiSettings } from '../../../shared/portal';
+import { type FlagKind, type ThresholdKey, type ThresholdsResponse, THRESHOLD_INFO, THRESHOLD_KIND } from '../../../shared/moderation';
 import { FLAG_ALERT_LEVELS } from '../../../shared/reliability';
 import { useAuth } from '../auth/AuthGate';
 import { ApiError, api } from '../lib/api';
@@ -521,5 +522,81 @@ function PortalApiSettingsPart({ portalReady }: { portalReady: boolean }) {
       </label>
       {message && <p className={`text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
     </div>
+  );
+}
+
+/** Settings: which serious flags file a suspension request by themselves. An admin still approves every one. */
+export function AutoRequestsSection() {
+  const [settings, setSettings] = useState<AutoRequestSettings | null>(null);
+  const [thresholds, setThresholds] = useState<ThresholdsResponse | null>(null);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    api<AutoRequestSettings>('/api/suspensions/automatic').then(setSettings).catch(() => {});
+    api<ThresholdsResponse>('/api/moderation/thresholds').then(setThresholds).catch(() => {});
+  }, []);
+
+  const serious = (kind: FlagKind): string => {
+    if (!thresholds) return '';
+    const keys = (Object.keys(THRESHOLD_KIND) as ThresholdKey[]).filter((k) => THRESHOLD_KIND[k] === kind);
+    const parts = keys
+      .filter((k) => thresholds.thresholds[k].enabled && thresholds.thresholds[k].high !== undefined)
+      .map((k) => `${thresholds.thresholds[k].high!.toLocaleString()} ${THRESHOLD_INFO[k].unit}`);
+    return parts.length ? `Serious from ${parts.join(' or ')}` : 'This check is off, or has no serious level';
+  };
+  const label = (kind: FlagKind) => {
+    const key = (Object.keys(THRESHOLD_KIND) as ThresholdKey[]).find((k) => THRESHOLD_KIND[k] === kind)!;
+    return kind === 'heavy_downloads' ? 'Offline downloads in a week' : THRESHOLD_INFO[key].label;
+  };
+
+  const toggle = async (kind: FlagKind, on: boolean) => {
+    if (!settings) return;
+    setMessage(null);
+    try {
+      const kinds = on ? [...settings.kinds, kind] : settings.kinds.filter((k) => k !== kind);
+      setSettings(await api<AutoRequestSettings>('/api/suspensions/automatic', { method: 'POST', body: { kinds } }));
+      setMessage({ ok: true, text: 'Saved.' });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Couldn’t save.' });
+    }
+  };
+
+  if (!settings) return null;
+  return (
+    <section className="rounded-xl border border-line bg-panel p-5">
+      <h2 className="font-semibold">Automatic suspension requests</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        When one of these checks reaches <strong className="font-medium text-ink">Serious</strong>, Almanac files a suspension request by itself, with the evidence as
+        the reason, and tells admins on Discord and the phone. It waits for an admin like any mod’s request: nothing happens to the account until someone approves
+        it. Accounts with an exception for that kind of flag are left alone. The levels are set under Account checks.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {AUTO_REQUEST_KINDS.map((kind) => (
+          <li key={kind}>
+            <label className="flex cursor-pointer items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={settings.kinds.includes(kind)}
+                onChange={(e) => void toggle(kind, e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+              />
+              <span>
+                {label(kind)}
+                <span className="block text-xs text-ink-faint">
+                  {serious(kind)}
+                  {kind === 'nonstop' || kind === 'heavy_daily' ? '. A TV left on with autoplay looks the same as restreaming, so check before approving.' : ''}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+      {settings.updatedBy && (
+        <p className="mt-2 text-xs text-ink-faint">
+          Last changed by {settings.updatedBy} {settings.updatedAt ? formatWhen(settings.updatedAt) : ''}
+        </p>
+      )}
+    </section>
   );
 }

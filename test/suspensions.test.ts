@@ -110,3 +110,52 @@ describe('suspensions through the billing portal', () => {
     expect(() => service.configure({ secret: 'short' }, 'sam')).toThrow(/at least 24 characters/);
   });
 });
+
+describe('automatic suspension requests', () => {
+  async function setup() {
+    const { AutoRequests } = await import('../server/suspensions/auto.js');
+    const { openDatabase } = await import('../server/db/database.js');
+    const { SuspensionService } = await import('../server/suspensions/suspensions.js');
+    const db = openDatabase(':memory:');
+    db.prepare("INSERT INTO silo_users (id, username, email, enabled, synced_at) VALUES ('42', 'pike', 'pike@example.com', 1, ?), ('43', 'gone', null, 0, ?)").run(new Date().toISOString(), new Date().toISOString());
+    const notes: string[] = [];
+    const pending: string[] = [];
+    const suspensions = new SuspensionService(db, { note: (_u, a, t) => notes.push(`${a.name}: ${t}`), onPending: (r) => pending.push(r.requestedBy) }, async () => new Response('{}'));
+    const auto = new AutoRequests(db, suspensions, () => {});
+    const event = (over: Partial<import('../server/moderation/service.js').FlagEvent> = {}) => ({
+      reason: 'new' as const,
+      userId: '42',
+      username: 'pike',
+      email: 'pike@example.com',
+      kind: 'heavy_downloads' as const,
+      severity: 'high' as const,
+      headline: 'Downloaded 120 titles (1.2 TB) for offline viewing in 7 days',
+      details: ['From {{time:2026-11-19T12:33:00.000Z}} to later.'],
+      ...over,
+    });
+    return { auto, suspensions, notes, pending, event };
+  }
+
+  it('files a request for chosen serious flags, which waits for an admin', async () => {
+    const { auto, suspensions, notes, pending, event } = await setup();
+    expect(await auto.onFlagEvents([event()])).toBe(0); // nothing chosen yet
+    auto.update(['heavy_downloads', 'nonstop'], 'admin');
+    expect(await auto.onFlagEvents([event()])).toBe(1);
+    const request = suspensions.list({ userId: '42' }).requests[0]!;
+    expect(request).toMatchObject({ action: 'suspend', status: 'pending', requestedBy: 'Almanac (automatic)' });
+    expect(request.reason).toBe('Automatic request (possible ripping): Downloaded 120 titles (1.2 TB) for offline viewing in 7 days. From 19 Nov 2026, 12:33 UTC to later.');
+    expect(pending).toEqual(['Almanac (automatic)']);
+    expect(notes[0]).toMatch(/^Almanac \(automatic\): Asked for this account to be suspended/);
+    // One request at a time.
+    expect(await auto.onFlagEvents([event({ reason: 'worse' })])).toBe(0);
+    expect(suspensions.list({ userId: '42' }).requests).toHaveLength(1);
+  });
+
+  it('leaves alone flags that aren’t serious or chosen, and accounts already off', async () => {
+    const { auto, suspensions, event } = await setup();
+    auto.update(['heavy_downloads'], 'admin');
+    expect(await auto.onFlagEvents([event({ severity: 'medium' }), event({ kind: 'nonstop' }), event({ userId: '43' })])).toBe(0);
+    expect(suspensions.list({}).requests).toHaveLength(0);
+    expect(() => auto.update(['many_networks'], 'admin')).toThrow(/can become serious/);
+  });
+});

@@ -30,6 +30,7 @@ import type { ReliabilityService } from './reliability/reliability.js';
 import { CapacityError, type CapacityService } from './capacity/capacity.js';
 import type { PlaybackHealth } from './health/health.js';
 import { PortalApiError, type PortalApi } from './portal/portal.js';
+import type { AutoRequests } from './suspensions/auto.js';
 import { FailureLimiter } from './auth/rateLimit.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
@@ -71,6 +72,7 @@ export interface AppServices {
   capacity: CapacityService;
   health: PlaybackHealth;
   portalApi: PortalApi;
+  autoRequests: AutoRequests;
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
@@ -142,7 +144,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, staff, suspensions, board, statusBoard, push }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -582,6 +584,8 @@ export function createApp(
     const { user } = c.get('session');
     return { id: user.id, name: user.username, role: user.role };
   };
+  app.get('/api/suspensions/automatic', requirePermission('requestSuspension'), (c) => c.json(autoRequests.view()));
+  app.post('/api/suspensions/automatic', requirePermission('reviewSuspension'), async (c) => c.json(autoRequests.update((await jsonBody(c)).kinds, c.get('session').user.username)));
   app.get('/api/suspensions', requirePermission('requestSuspension'), (c) => {
     const status = c.req.query('status');
     return c.json(

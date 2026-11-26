@@ -220,6 +220,7 @@ Almanac doesn't suspend accounts itself: its Silo key is read-only. Instead it a
 - A **mod** presses *Suspend until they get in touch* (or *Lift the suspension*) on a user's page and writes a reason. The request waits on the Moderation page for an admin, and the staff Discord channel is told.
 - An **admin** approves it (Almanac sends it to the portal) or rejects it (with a reason). An admin's own requests go straight to the portal.
 - Every step is written to the account's notes: who asked, why, who approved, and what the portal said.
+- **Automatic requests** (optional, Settings → Automatic suspension requests): when a chosen check reaches *Serious* (offline downloads, titles opened but not watched, hours without a break, hours a day, networks at the same time), Almanac files the request itself, as *Almanac (automatic)*, with the evidence as the reason. It waits for an admin like any other: nothing happens to the account until someone approves it. Accounts with an exception for that kind of flag are left alone.
 
 Set it up in **Settings → Billing portal**: the address Almanac should send requests to, and a shared signing secret (*Generate one* makes a strong one; put the same value in your portal). *Send a test* sends a `ping`.
 
