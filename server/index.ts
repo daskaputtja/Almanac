@@ -54,6 +54,12 @@ try {
   process.exit(1);
 }
 
+// Silo now gives artwork as paths on its own server; fix any already stored
+// (the 12-hourly catalog re-read refreshes them properly).
+if (silo) {
+  db.prepare("UPDATE catalog_items SET poster_url = ? || poster_url WHERE poster_url LIKE '/%' AND poster_url NOT LIKE '//%'").run(config.siloUrl.replace(/\/+$/, ''));
+}
+
 const history = new HistoryStore(db);
 const historySync = new HistorySync(history, historySource, { intervalMs: config.historySyncIntervalMs });
 historySync.start();

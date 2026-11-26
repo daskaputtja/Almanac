@@ -117,7 +117,7 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
       throw new SiloError(`Silo returned ${res.status} for ${path}: ${detail}`, res.status);
     }
 
-    return (await res.json()) as T;
+    return withAbsoluteUrls(await res.json(), this.baseUrl) as T;
   }
 
   /** Every live playback session on the server, following Silo's cursor paging. */
@@ -289,4 +289,20 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
       } },
     }));
   }
+}
+
+/**
+ * Silo gives artwork (poster_url and other *_url fields) as paths on its own
+ * server, like /api/v2/item-posters/123?exp=…&sig=…. They're public, signed
+ * links, but a browser showing Almanac would ask Almanac for them, so put
+ * Silo's address in front. Full addresses are left alone.
+ */
+export function withAbsoluteUrls(value: unknown, baseUrl: string): unknown {
+  if (Array.isArray(value)) return value.map((v) => withAbsoluteUrls(v, baseUrl));
+  if (!value || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, v] of Object.entries(value)) {
+    out[key] = key.endsWith('_url') && typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? `${baseUrl}${v}` : withAbsoluteUrls(v, baseUrl);
+  }
+  return out;
 }
