@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CapacityService, theilSen } from '../server/capacity/capacity.js';
 import { openDatabase } from '../server/db/database.js';
-import { PlaybackHealth } from '../server/health/health.js';
-import { describeDevice, deviceTips, thirdPartyNote } from '../server/health/devices.js';
+import { compareVersions, PlaybackHealth } from '../server/health/health.js';
+import { appDescription, describeDevice, deviceTips, thirdPartyNote } from '../server/health/devices.js';
 import { StaffAlerts } from '../server/notify/staff.js';
 
 const NOW = Date.parse('2026-11-20T12:00:00Z');
@@ -194,7 +194,7 @@ describe('playback health', () => {
     const drops = robin.issues.find((i) => i.kind === 'drops')!;
     expect(drops.severity).toBe('high');
     expect(drops.headline).toBe('9 of 35 streams dropped (26%; about 4% for others on the same apps)');
-    expect(drops.advice.join(' ')).toMatch(/Most drops are on Silo on Fire TV \(9 of 9\)/);
+    expect(drops.advice.join(' ')).toMatch(/Most drops are on their Fire TV \(Silo\): 9 of 9/);
     expect(drops.advice.join(' ')).toMatch(/other devices play fine/);
   });
 
@@ -230,7 +230,7 @@ describe('playback health', () => {
     const robin = health.overview(NOW).users.find((u) => u.userId === 'bad')!;
     const issue = robin.issues.find((i) => i.kind === 'transcoding')!;
     expect(issue.headline).toMatch(/^19 of 20 streams converted/);
-    expect(issue.advice[0]).toMatch(/Mostly on Old Box on Roku/);
+    expect(issue.advice[0]).toMatch(/Mostly on their Roku \(Old Box\)/);
     expect([...issue.advice, ...issue.device!.tips].join(' ')).toMatch(/HEVC/);
     // And for their device specifically.
     expect(issue.device!.name).toBe('Roku');
@@ -298,6 +298,11 @@ describe('devices', () => {
     expect(d('xbox', 'Silolux for Xbox', null)!.kind).toBe('xbox');
     expect(d('android', 'Silo Android', 'samsung SM-S938B')).toEqual({ kind: 'android-phone', name: 'Samsung SM-S938B' });
     expect(d(null, 'Infuse-Direct', null)).toBeNull();
+    expect(d('windows', 'Silage', 'DESKTOP-1')).toEqual({ kind: 'computer', name: 'computer', detail: 'DESKTOP-1 · Windows' });
+    expect(d(null, 'Jellyfin Media Player', null)).toEqual({ kind: 'computer', name: 'computer', detail: null });
+    expect(appDescription('Jellyfin Media Player')).toBe('a desktop app for Windows, Mac and Linux');
+    expect(appDescription('Kodi JellyCon')).toMatch(/Kodi add-on/);
+    expect(appDescription('Silo Web')).toBeNull();
   });
 
   it('gives tips for the device and the reasons', () => {
@@ -310,6 +315,30 @@ describe('devices', () => {
     expect(thirdPartyNote(describeDevice('android-tv', 'Jellyfin Android TV', 'NVIDIA SHIELD Android TV')!, 'Jellyfin Android TV')).toMatch(/third-party app.*NVIDIA Shield/);
     expect(thirdPartyNote(roku, 'Moonfin Roku')).toBeNull(); // no Silo app to suggest on Roku
     expect(thirdPartyNote(lite, 'Silo Android TV')).toBeNull();
+  });
+
+  it('compares app versions and suggests updating an old one', () => {
+    expect(compareVersions('1.2.10', '1.2.9')).toBeGreaterThan(0);
+    expect(compareVersions('1.0.0', '1.2.0')).toBeLessThan(0);
+    expect(compareVersions('1.0.2+py3', '1.0.2')).toBe(0);
+    const db = openDatabase(':memory:');
+    const insert = db.prepare(
+      `INSERT INTO plays (session_id, user_id, username, profile_id, media_type, title, started_at, ended_at, end_position,
+         watched_seconds, completed, play_method, client_name, client_version, device_platform, end_reason, imported_at)
+       VALUES (?, ?, ?, 'p', 'movie', 'T', ?, ?, 0, 1800, 0, 'direct', 'Silo Android TV', ?, 'android-tv', ?, ?)`,
+    );
+    let n = 0;
+    const add = (user: string, count: number, dropped: number, version: string) => {
+      for (let i = 0; i < count; i++) {
+        const at = NOW - DAY - i * HOUR;
+        insert.run(`s${++n}`, user, user, new Date(at).toISOString(), new Date(at + HOUR).toISOString(), version, i < dropped ? 'expired' : 'stopped', new Date(NOW).toISOString());
+      }
+    };
+    for (let u = 0; u < 6; u++) add(`ok${u}`, 30, 1, '1.2.0');
+    add('old', 20, 12, '1.0.0');
+    const user = new PlaybackHealth(db).overview(NOW).users.find((u) => u.userId === 'old')!;
+    expect(user.players[0]).toMatchObject({ version: '1.0.0', newerVersion: '1.2.0' });
+    expect(user.issues[0]!.advice.join(' ')).toMatch(/Their Silo Android TV is version 1\.0\.0, but others are on 1\.2\.0/);
   });
 
   it('names the device and what helps on it in a viewer’s issues', () => {
@@ -333,7 +362,7 @@ describe('devices', () => {
 
     const user = new PlaybackHealth(db).overview(NOW).users[0]!;
     const drops = user.issues.find((i) => i.kind === 'drops')!;
-    expect(drops.advice[0]).toBe('Most drops are on Silo Android TV on Fire TV Stick Lite (10 of 10).');
+    expect(drops.advice[0]).toBe('Most drops are on their Fire TV Stick Lite (Silo Android TV): 10 of 10.');
     expect(drops.device!.name).toBe('Fire TV Stick Lite');
     expect(drops.device!.tips.join(' ')).toMatch(/Select and Play\/Pause/);
     expect(user.players.find((p) => p.label === 'Silo Android TV')!.device).toEqual({ kind: 'fire-tv-hd', name: 'Fire TV Stick Lite' });

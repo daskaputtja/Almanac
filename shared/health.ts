@@ -19,7 +19,13 @@ export interface PlayerHealth {
   label: string;
   platform: string | null;
   /** The device, when Silo says what it is (e.g. "Fire TV Stick 4K Max (2021)"). */
-  device: { name: string; kind: string } | null;
+  device: { name: string; kind: string; detail?: string | null } | null;
+  /** The app's version, if Silo says. */
+  version: string | null;
+  /** The newest version of this app anyone on the server used, when it's newer than theirs. */
+  newerVersion: string | null;
+  /** For a third-party app on an unknown device, what the app is (e.g. "a desktop app for Windows, Mac and Linux"). */
+  about: string | null;
   plays: number;
   /** Plays whose drops can be judged: 0 for apps that never tell Silo they stopped, so every stream looks dropped. */
   dropPlays: number;

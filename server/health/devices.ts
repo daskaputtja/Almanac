@@ -30,6 +30,25 @@ export interface DeviceInfo {
   kind: DeviceKind;
   /** A friendly name, e.g. "Fire TV Stick 4K Max (2021)". */
   name: string;
+  /** More about it where Silo says, e.g. the computer's name and system ("Flame · Windows"). */
+  detail?: string | null;
+}
+
+/** Third-party apps that don't say what they run on, and what they are. */
+const KNOWN_APPS: [RegExp, string][] = [
+  [/^jellyfin media player/i, 'a desktop app for Windows, Mac and Linux'],
+  [/^kodi/i, 'a Kodi add-on, so any Kodi box'],
+  [/^plezy windows/i, 'a Windows app'],
+  [/^infuse/i, 'an app for iPhone, iPad, Mac and Apple TV'],
+  [/^vidhub/i, 'an app for Apple devices'],
+  [/^swiftfin/i, 'an app for iPhone, iPad and Apple TV'],
+  [/^findroid/i, 'an Android app'],
+];
+
+/** What a third-party app is, when Silo can't say what it's running on. */
+export function appDescription(client: string | null): string | null {
+  if (!client) return null;
+  return KNOWN_APPS.find(([re]) => re.test(client.trim()))?.[1] ?? null;
 }
 
 export type TipTopic = 'drops' | 'slowStarts' | 'video' | 'hdr' | 'audio' | 'subtitles' | 'quality';
@@ -85,7 +104,10 @@ export function describeDevice(platform: string | null, client: string | null, m
     return { kind: 'android-tv-box', name: m ? tidyModel(m) : 'Android TV device' };
   }
   if (p === 'android' || /android/.test(c)) return { kind: 'android-phone', name: m ? tidyModel(m) : 'Android phone' };
-  if (/^(windows|macos|linux)$/.test(p) || /\b(mac|windows|silage|media player)\b/.test(c)) return { kind: 'computer', name: 'computer' };
+  if (/^(windows|macos|linux)$/.test(p) || /\b(mac|windows|silage|media player)\b/.test(c)) {
+    const system = /^(windows|macos|linux)$/.test(p) ? { windows: 'Windows', macos: 'macOS', linux: 'Linux' }[p] : null;
+    return { kind: 'computer', name: 'computer', detail: [m || null, system].filter(Boolean).join(' · ') || null };
+  }
   return null;
 }
 

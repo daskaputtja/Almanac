@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { HealthIssue, HealthOverview, UserHealthResponse } from '../../../shared/health';
+import type { HealthIssue, HealthOverview, PlayerHealth, UserHealth, UserHealthResponse } from '../../../shared/health';
 import { api } from '../lib/api';
 import { formatRate, platformLabel, reasonLabel } from '../lib/format';
 import { Link } from '../lib/router';
@@ -99,7 +99,10 @@ export function RoughTimeList() {
                     <span className="font-medium">{u.username}</span>
                     {u.email && <span className="ml-1.5 break-all text-xs text-ink-faint">{u.email}</span>}
                   </span>
-                  <span className="w-full text-sm text-ink-muted sm:ml-auto sm:w-auto">{u.issues.map((i) => KIND_LABEL[i.kind]).join(' · ')}</span>
+                  <span className="w-full text-sm text-ink-muted sm:ml-auto sm:w-auto">
+                    {u.issues.map((i) => KIND_LABEL[i.kind]).join(' · ')}
+                    {mainDevice(u) && <span className="text-ink"> · {mainDevice(u)}</span>}
+                  </span>
                 </button>
                 {expanded && (
                   <div className="space-y-3 px-4 pb-4">
@@ -108,6 +111,7 @@ export function RoughTimeList() {
                         <Issue key={i.kind} issue={i} />
                       ))}
                     </ul>
+                    <DeviceList user={u} />
                     <Link to={`/users/${encodeURIComponent(u.userId)}`} className="inline-block text-sm text-accent hover:underline">
                       Open {u.username}’s page
                     </Link>
@@ -119,6 +123,49 @@ export function RoughTimeList() {
         </ul>
       )}
     </section>
+  );
+}
+
+/** The hardware a player runs on, as far as Silo knows. */
+export function deviceText(p: PlayerHealth): string {
+  if (p.device?.kind === 'computer') return p.device.detail ? `Computer (${p.device.detail})` : 'Computer';
+  if (p.device) return p.device.kind === 'browser' && p.device.name === 'web browser' ? 'Web browser' : p.device.name;
+  if (p.platform) return platformLabel(p.platform) ?? p.platform;
+  return 'Unknown device';
+}
+
+/** The device behind a viewer's worst problem (most drops, or most streams). */
+function mainDevice(u: UserHealth): string | null {
+  const drops = u.issues.some((i) => i.kind === 'drops');
+  const p = [...u.players].sort((a, b) => (drops ? b.dropped - a.dropped : b.plays - a.plays))[0];
+  return p ? deviceText(p) : null;
+}
+
+/** Every device a viewer used, and the app on it, most used first. */
+function DeviceList({ user }: { user: UserHealth }) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase tracking-wider text-ink-faint">Their devices</p>
+      <ul className="mt-1 space-y-1 text-sm">
+        {user.players.map((p) => (
+          <li key={`${p.label}|${p.platform ?? ''}|${p.device?.name ?? ''}|${p.device?.detail ?? ''}`} className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-medium">{deviceText(p)}</span>
+            <span className="text-ink-muted">
+              {p.label}
+              {p.version ? ` ${p.version}` : ''}
+              {p.newerVersion && <span className="ml-1 text-xs text-[#fab219]">(newest is {p.newerVersion})</span>}
+            </span>
+            {!p.device?.detail && (!p.device || p.device.kind === 'computer') && (
+              <span className="text-xs text-ink-faint">Silo doesn’t say which device{p.about ? `; the app is ${p.about}` : ''}</span>
+            )}
+            <span className="text-xs tabular-nums text-ink-faint">
+              {p.plays.toLocaleString()} {p.plays === 1 ? 'stream' : 'streams'}
+              {p.dropPlays ? ` · ${formatRate(p.dropped / p.dropPlays)} dropped` : ' · drops not reported'} · {formatRate(p.transcodes / p.plays)} converted
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -154,7 +201,7 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
           <table className="w-full min-w-[28rem] text-sm">
             <thead className="text-left text-xs text-ink-faint">
               <tr>
-                <th className="px-4 py-2 font-medium">App and device</th>
+                <th className="px-4 py-2 font-medium">Device and app</th>
                 <th className="px-4 py-2 text-right font-medium">Streams</th>
                 <th className="px-4 py-2 text-right font-medium">Dropped</th>
                 <th className="px-4 py-2 text-right font-medium">Within seconds</th>
@@ -165,10 +212,12 @@ export function UserPlaybackCard({ health }: { health: UserHealthResponse }) {
               {user.players.map((p) => (
                 <tr key={`${p.label}|${p.platform ?? ''}`} className="border-t border-line/60">
                   <td className="px-4 py-2">
-                    <span className="font-medium">{p.label}</span>
-                    {(p.device?.name ?? p.platform) && (
-                      <span className="ml-1.5 text-xs text-ink-faint">{p.device && p.device.kind !== 'computer' ? p.device.name : platformLabel(p.platform)}</span>
-                    )}
+                    <span className="font-medium">{deviceText(p)}</span>
+                    <span className="block text-xs text-ink-faint">
+                      {p.label}
+                      {p.version ? ` ${p.version}` : ''}
+                      {p.newerVersion ? ` (newest is ${p.newerVersion})` : ''}
+                    </span>
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums text-ink-muted">{p.plays.toLocaleString()}</td>
                   <td className="px-4 py-2 text-right tabular-nums" title={p.dropPlays ? undefined : 'This app doesn’t tell Silo when playback stops, so drops can’t be judged.'}>

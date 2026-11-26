@@ -5,7 +5,7 @@ import { QUICK_STOP_SECONDS } from '../reliability/reliability.js';
 import { platformLabel } from '../../shared/platform.js';
 import { platformKey } from '../stats/stats.js';
 import { REASON_TEXT } from '../transcodes/doctor.js';
-import { type DeviceInfo, describeDevice, deviceTips, thirdPartyNote } from './devices.js';
+import { type DeviceInfo, appDescription, describeDevice, deviceTips, thirdPartyNote } from './devices.js';
 
 const DAY_MS = 86_400_000;
 /** Fewer plays than this and a couple of bad nights look like a pattern. */
@@ -49,6 +49,7 @@ interface PlayerRow {
   device_platform: string | null;
   /** The model a signed-in device reported, e.g. "Amazon AFTKA". */
   model: string | null;
+  version: string | null;
   plays: number;
   /** Plays whose drops can be judged (0 for apps that never say when they stop). */
   dropPlays: number;
@@ -65,6 +66,9 @@ interface PlayerRow {
  * being converted. Says which device it is and what might help.
  */
 export class PlaybackHealth {
+  /** The newest version of each app seen, from the last rows read. */
+  private newest = new Map<string, string>();
+
   constructor(private readonly db: Database) {}
 
   overview(now = Date.now()): HealthOverview {
@@ -107,7 +111,7 @@ export class PlaybackHealth {
   private rows(since: string): PlayerRow[] {
     const rows = this.db
       .prepare(
-        `SELECT p.user_id, MAX(p.username) AS username, p.client_name, p.device_platform, r.device_name AS model, COUNT(*) AS plays,
+        `SELECT p.user_id, MAX(p.username) AS username, p.client_name, p.device_platform, r.device_name AS model, MAX(p.client_version) AS version, COUNT(*) AS plays,
                 SUM(${DROPPED}) AS dropped, SUM(end_reason = 'expired') AS expired, SUM(${QUICK}) AS quick, SUM(p.play_method = 'transcode') AS transcodes
          FROM plays p LEFT JOIN registered_devices r ON r.user_id = p.user_id AND r.device_id = p.device_id
          WHERE ${MEASURED} AND p.started_at >= ?
@@ -116,6 +120,7 @@ export class PlaybackHealth {
          GROUP BY p.user_id, p.client_name, p.device_platform, r.device_name`,
       )
       .all(since) as unknown as PlayerRow[];
+    this.newest = newestVersions(rows);
     // Leave out drops from apps that never report stopping: for them every stream looks dropped.
     const unreported = unreportedApps(rows);
     for (const r of rows) {
@@ -179,7 +184,10 @@ export class PlaybackHealth {
       const key = `${playerKey(r.client_name, r.device_platform)}|${r.model ?? ''}`;
       const label = cleanClientName(r.client_name) ?? 'Unknown player';
       const device = describeDevice(r.device_platform, label, r.model);
-      const p = players.get(key) ?? { label, platform: r.device_platform, device, plays: 0, dropPlays: 0, dropped: 0, quickStops: 0, transcodes: 0 };
+      const about = device && device.kind !== 'computer' ? null : appDescription(label);
+      const newest = this.newest.get(label);
+      const newerVersion = newest && r.version && compareVersions(newest, r.version) > 0 ? newest : null;
+      const p = players.get(key) ?? { label, platform: r.device_platform, device, version: r.version, newerVersion, about, plays: 0, dropPlays: 0, dropped: 0, quickStops: 0, transcodes: 0 };
       p.plays += r.plays;
       p.dropPlays += r.dropPlays;
       p.dropped += r.dropped;
@@ -205,6 +213,30 @@ export class PlaybackHealth {
   }
 }
 
+/** The newest version of each app (by name) that anyone used. */
+function newestVersions(rows: PlayerRow[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const name = cleanClientName(r.client_name);
+    if (!name || !r.version) continue;
+    const best = out.get(name);
+    if (!best || compareVersions(r.version, best) > 0) out.set(name, r.version);
+  }
+  return out;
+}
+
+/** Compare "1.2.10" with "1.2.9" numerically. Anything after the numbers is ignored. */
+export function compareVersions(a: string, b: string): number {
+  const parts = (v: string) => (v.match(/\d+(\.\d+)*/)?.[0] ?? '0').split('.').map(Number);
+  const x = parts(a);
+  const y = parts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] ?? 0) - (y[i] ?? 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
 /** Apps (by name) that end nearly every stream, for everyone, without telling Silo. */
 function unreportedApps(rows: PlayerRow[]): Set<string> {
   const byApp = new Map<string, { plays: number; expired: number }>();
@@ -224,8 +256,25 @@ function playerKey(name: string | null, platform: string | null): string {
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
-const playerName = (p: PlayerHealth) =>
-  `${p.label}${p.device && p.device.kind !== 'browser' && p.device.kind !== 'computer' ? ` on ${p.device.name}` : p.platform && !p.device ? ` on ${platformLabel(p.platform)}` : ''}`;
+/** "their Fire TV Stick Lite (Silo Android TV)", device first, as people think of it. */
+const playerName = (p: PlayerHealth) => {
+  const hardware =
+    p.device?.kind === 'computer'
+      ? p.device.detail
+        ? `computer (${p.device.detail})`
+        : null
+      : p.device
+        ? p.device.kind === 'browser' && p.device.name === 'web browser'
+          ? 'web browser'
+          : p.device.name
+        : p.platform
+          ? platformLabel(p.platform)
+          : null;
+  return hardware ? `their ${hardware} (${p.label})` : p.label;
+};
+
+const updateLine = (p: PlayerHealth) =>
+  `Their ${p.label} is version ${p.version}, but others are on ${p.newerVersion}: updating the app is worth trying first.`;
 
 /** What usually helps on this player's device, plus a word about third-party apps. */
 function deviceHelp(p: PlayerHealth | undefined, topic: 'drops' | 'slowStarts' | 'transcoding', reasons: string[] = []): HealthIssue['device'] {
@@ -297,7 +346,8 @@ export function issuesFor(user: UserHealth, base: HealthBaseline, rates: AppRate
   if (user.quickStops >= 6 && user.quickStops >= Math.max(usual.expectedQuick * 2.5, usual.expectedQuick + 0.25 * plays)) {
     const advice = ['A few quick stops are just browsing, but this many usually means streams struggle to start.'];
     const worst = [...user.players].filter((p) => p.quickStops > 0).sort((a, b) => b.quickStops - a.quickStops)[0];
-    if (worst && user.players.length > 1 && worst.quickStops / user.quickStops >= 0.6) advice.push(`Most are on ${playerName(worst)} (${worst.quickStops} of ${user.quickStops}).`);
+    if (worst && user.players.length > 1 && worst.quickStops / user.quickStops >= 0.6) advice.push(`Most are on ${playerName(worst)}: ${worst.quickStops} of ${user.quickStops}.`);
+    if (worst && worst.quickStops / user.quickStops >= 0.6 && worst.newerVersion) advice.push(updateLine(worst));
     if (user.transcodes / plays >= 0.5) advice.push('Most of their streams are converted, and converted streams take longer to start.');
     issues.push({
       kind: 'slowStarts',
@@ -324,7 +374,7 @@ export function issuesFor(user: UserHealth, base: HealthBaseline, rates: AppRate
         seen.add(text);
       }
     }
-    if (main && main.transcodes / Math.max(1, user.transcodes) >= 0.6) advice.unshift(`Mostly on ${playerName(main)} (${main.transcodes} of ${user.transcodes} conversions).`);
+    if (main && main.transcodes / Math.max(1, user.transcodes) >= 0.6) advice.unshift(`Mostly on ${playerName(main)}: ${main.transcodes} of ${user.transcodes} conversions.`);
     if (!user.reasons.length) advice.push('Almanac hasn’t caught one of their converted streams live yet, so it doesn’t know why. It will once it does.');
     issues.push({
       kind: 'transcoding',
@@ -344,7 +394,8 @@ function dropAdvice(user: UserHealth, base: HealthBaseline, forPlayer: ReturnTyp
   const concentrated = worst.dropped / user.dropped >= 0.6;
   const judged = user.players.filter((p) => p.dropPlays >= 5);
 
-  if (concentrated && user.players.length > 1) advice.push(`Most drops are on ${playerName(worst)} (${worst.dropped} of ${user.dropped}).`);
+  if (concentrated && user.players.length > 1) advice.push(`Most drops are on ${playerName(worst)}: ${worst.dropped} of ${user.dropped}.`);
+  if (concentrated && worst.newerVersion) advice.push(updateLine(worst));
   // The app drops a lot for everyone: part of it is the app, not them.
   const appRate = forPlayer(worst).dropRate;
   if (concentrated && appRate >= Math.max(base.droppedRate * 2, base.droppedRate + 0.08)) {
