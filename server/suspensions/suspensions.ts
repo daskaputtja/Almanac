@@ -12,7 +12,7 @@ import {
 } from '../../shared/suspensions.js';
 import type { Database } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
-import type { DiscordEmbed } from '../notify/discord.js';
+import type { DiscordEmbed, LinkButton } from '../notify/discord.js';
 import { WhmcsClient, type WhmcsMatch, type WhmcsSettings } from './whmcs.js';
 
 const SETTINGS_KEY = 'billingPortal';
@@ -62,7 +62,7 @@ export interface SuspensionHooks {
   /** Write a note on the user (who asked, why, what happened). */
   note: (userId: string, actor: SuspensionActor, text: string) => void;
   /** Tell staff (the staff Discord channel). Failures are ignored. */
-  tellStaff?: (embed: DiscordEmbed) => Promise<void>;
+  tellStaff?: (embed: DiscordEmbed, buttons?: LinkButton[]) => Promise<void>;
   /** Almanac's own address, for links in staff posts. */
   baseUrl?: () => string | null;
   /** A mod's request is waiting for an admin (for push notifications). */
@@ -248,9 +248,9 @@ export class SuspensionService {
       url: this.link(userId),
       description: [`**${escape(user.username)}**${user.email ? ` · ${escape(user.email)}` : ''}`, `Reason: ${escape(text)}`].join('\n'),
       color: action === 'suspend' ? 0xd03b3b : 0x0ca30c,
-      footer: { text: 'Approve or reject it on the Moderation page' },
+      footer: { text: 'Approve or reject it in Almanac' },
       timestamp: now,
-    });
+    }, this.buttons(id, userId));
     return this.get(id);
   }
 
@@ -364,12 +364,22 @@ export class SuspensionService {
     throw new Error(`The billing portal answered ${res.status}${said ? `: ${said}` : ''}`);
   }
 
-  private async tell(embed: DiscordEmbed): Promise<void> {
+  private async tell(embed: DiscordEmbed, buttons: LinkButton[] = []): Promise<void> {
     try {
-      await this.hooks.tellStaff?.(embed);
+      await this.hooks.tellStaff?.(embed, buttons);
     } catch {
       // No staff channel, or Discord is down: the request still stands.
     }
+  }
+
+  /** Buttons for a staff post about a request: straight to it, and to the customer's case file. */
+  private buttons(id: number, userId: string): LinkButton[] {
+    const base = this.hooks.baseUrl?.();
+    if (!base) return [];
+    return [
+      { label: 'Review in Almanac', url: `${base}/moderation?request=${id}#request-${id}` },
+      { label: 'Case file', url: `${base}/users/${encodeURIComponent(userId)}/case` },
+    ];
   }
 
   private link(userId: string): string | undefined {

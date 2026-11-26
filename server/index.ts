@@ -174,7 +174,7 @@ const suspensions = new SuspensionService(db, {
   onPending: (r) => quietly(push.suspensionRequested(r)),
   onDecided: (r) => quietly(push.suspensionDecided(r)),
   note: (userId, actor, text) => moderation.addNote(userId, { id: actor.id, name: actor.name, manageAllNotes: false }, text),
-  tellStaff: (embed) => staff.post(embed),
+  tellStaff: (embed, buttons) => staff.post(embed, buttons),
   baseUrl: () => staff.baseUrl(),
 });
 // Serious flags of chosen kinds file a suspension request by themselves (an admin approves it).

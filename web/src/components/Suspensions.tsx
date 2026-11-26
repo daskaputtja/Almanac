@@ -7,7 +7,7 @@ import { useAuth } from '../auth/AuthGate';
 import { ApiError, api } from '../lib/api';
 import { formatFullDate, formatWhen } from '../lib/format';
 import { useModeration } from '../lib/moderation';
-import { Link } from '../lib/router';
+import { Link, useLocation } from '../lib/router';
 
 const input = 'rounded-lg border border-line bg-canvas px-3 py-2 text-sm placeholder:text-ink-faint focus:border-accent-dim focus:outline-none';
 const primary = 'rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-canvas hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50';
@@ -159,7 +159,20 @@ function AskForm({ userId, username, action, onCancel, onDone }: { userId: strin
 }
 
 /** One request: what, why, who, and (for admins) approve, reject or retry. */
-export function RequestCard({ request: r, onChange, compact, showUser }: { request: SuspensionRequest; onChange: () => void; compact?: boolean; showUser?: boolean }) {
+export function RequestCard({
+  request: r,
+  onChange,
+  compact,
+  showUser,
+  focused,
+}: {
+  request: SuspensionRequest;
+  onChange: () => void;
+  compact?: boolean;
+  showUser?: boolean;
+  /** Opened from a link (a Discord button): scroll to it and highlight it. */
+  focused?: boolean;
+}) {
   const { can } = useAuth();
   const [deciding, setDeciding] = useState<'approve' | 'reject' | null>(null);
   const [note, setNote] = useState('');
@@ -183,7 +196,16 @@ export function RequestCard({ request: r, onChange, compact, showUser }: { reque
   };
 
   return (
-    <div className={`rounded-lg border bg-canvas/40 p-3 text-sm ${r.status === 'pending' ? 'border-[#fab219]/60' : 'border-line'}`}>
+    <div
+      id={`request-${r.id}`}
+      ref={(el) => {
+        if (el && focused && !el.dataset.scrolled) {
+          el.dataset.scrolled = '1';
+          el.scrollIntoView({ block: 'center' });
+        }
+      }}
+      className={`scroll-mt-24 rounded-lg border bg-canvas/40 p-3 text-sm ${focused ? 'ring-2 ring-accent' : ''} ${r.status === 'pending' ? 'border-[#fab219]/60' : 'border-line'}`}
+    >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium">
           <span className="h-2 w-2 rounded-full" style={{ background: status.color }} aria-hidden="true" />
@@ -272,6 +294,8 @@ export function RequestCard({ request: r, onChange, compact, showUser }: { reque
 /** On the Moderation page: requests waiting for an admin, and recent decisions. */
 export function SuspensionQueue() {
   const { refresh: refreshCounts } = useModeration();
+  const { search } = useLocation();
+  const focusId = Number(new URLSearchParams(search).get('request')) || null;
   const [data, setData] = useState<SuspensionsResponse | null>(null);
   const [showAll, setShowAll] = useState(false);
   const load = useCallback(() => {
@@ -286,7 +310,11 @@ export function SuspensionQueue() {
   }, [load]);
   if (!data || data.requests.length === 0) return null;
   const pending = data.requests.filter((r) => r.status === 'pending');
-  const recent = data.requests.filter((r) => r.status !== 'pending').slice(0, showAll ? 50 : 3);
+  const decided = data.requests.filter((r) => r.status !== 'pending');
+  const recent = decided.slice(0, showAll ? 50 : 3);
+  // A link to an older request (already dealt with) still shows it.
+  const linked = focusId ? decided.find((r) => r.id === focusId) : undefined;
+  if (linked && !recent.includes(linked)) recent.unshift(linked);
   const changed = () => {
     load();
     refreshCounts();
@@ -298,12 +326,13 @@ export function SuspensionQueue() {
         Suspension requests{pending.length > 0 && <span className="ml-2 text-xs font-normal text-ink-muted">{pending.length} waiting for an admin</span>}
       </h2>
       <div className="mt-3 space-y-2">
+        {focusId && !data.requests.some((r) => r.id === focusId) && <p className="text-sm text-ink-muted">That request isn’t in the recent list any more.</p>}
         {pending.map((r) => (
-          <RequestCard key={r.id} request={r} onChange={changed} showUser />
+          <RequestCard key={r.id} request={r} onChange={changed} showUser focused={r.id === focusId} />
         ))}
         {recent.length > 0 && <p className="pt-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Recent</p>}
         {recent.map((r) => (
-          <RequestCard key={r.id} request={r} onChange={changed} showUser compact />
+          <RequestCard key={r.id} request={r} onChange={changed} showUser compact focused={r.id === focusId} />
         ))}
       </div>
       {data.requests.filter((r) => r.status !== 'pending').length > 3 && (

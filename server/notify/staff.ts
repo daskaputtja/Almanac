@@ -4,7 +4,7 @@ import type { FlagAlertLevel, StaffAlertsSettings } from '../../shared/reliabili
 import type { FlagEvent } from '../moderation/service.js';
 import type { Database } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
-import { DiscordError, type DiscordEmbed, postToDiscord } from './discord.js';
+import { DiscordError, type DiscordEmbed, type LinkButton, postToDiscord } from './discord.js';
 import { NotifyError, webhookHint } from './notifier.js';
 
 const KEY = 'staffAlerts';
@@ -91,9 +91,9 @@ export class StaffAlerts {
   }
 
   /** Post anything to the staff channel, if there is one. */
-  async post(embed: DiscordEmbed): Promise<void> {
+  async post(embed: DiscordEmbed, buttons: LinkButton[] = []): Promise<void> {
     if (!this.stored().webhookUrl) return;
-    await this.send(embed);
+    await this.send(embed, buttons);
   }
 
   /** Is this kind of alert turned on, with somewhere to send it? */
@@ -125,7 +125,7 @@ export class StaffAlerts {
         color: SEVERITY_COLOUR[sorted[0]!.severity],
         footer: { text: 'Almanac' },
         timestamp: new Date().toISOString(),
-      });
+      }, s.baseUrl ? [{ label: 'Open Moderation', url: `${s.baseUrl}/moderation` }] : []);
       return wanted.length;
     }
 
@@ -139,16 +139,19 @@ export class StaffAlerts {
         color: SEVERITY_COLOUR[e.severity],
         footer: { text: 'Almanac' },
         timestamp: new Date().toISOString(),
-      });
+      }, s.baseUrl ? [
+        { label: 'Open in Almanac', url: `${s.baseUrl}/users/${encodeURIComponent(e.userId)}` },
+        { label: 'Case file', url: `${s.baseUrl}/users/${encodeURIComponent(e.userId)}/case` },
+      ] : []);
     }
     return wanted.length;
   }
 
-  async send(embed: DiscordEmbed): Promise<void> {
+  async send(embed: DiscordEmbed, buttons: LinkButton[] = []): Promise<void> {
     const url = this.stored().webhookUrl;
     if (!url) throw new NotifyError('Add a staff webhook first.');
     try {
-      await postToDiscord(url, [embed], this.fetchImpl);
+      await postToDiscord(url, [embed], this.fetchImpl, undefined, buttons);
     } catch (err) {
       if (err instanceof DiscordError) {
         this.log(`Staff alert not sent: ${err.message}`);

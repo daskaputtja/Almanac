@@ -100,9 +100,12 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - **Server status:** one message showing each server on an Uptime Kuma status page with a coloured dot and its uptime today (🟢 Emby 1: 100% today), or how long it has been down, edited every 2 minutes. Works behind Cloudflare Access with a service token
 - **Library counts:** one message in a channel of your choice listing every library and how much is in it (with new films and episodes this week), edited every hour so the channel never fills up. Choose which libraries to show
 
+- **Buttons on staff posts:** suspension requests come with *Review in Almanac* (opens that request, ready to approve or reject) and *Case file*; flags come with *Open in Almanac* and *Case file*
+
 ### Later
 - Notifications for other events and services
 - Recently added newsletters
+- Approve and reject suspension requests straight from Discord, with a Discord bot: each admin links their Discord account so only they can press the buttons, and a reject asks for the reason in a pop-up
 
 ## How it works
 

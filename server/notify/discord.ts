@@ -33,16 +33,29 @@ export class DiscordError extends Error {
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 /** Post one message, waiting out Discord's rate limit once if it asks. */
+/** A button that opens a link (Discord allows these on plain webhooks). */
+export interface LinkButton {
+  label: string;
+  url: string;
+}
+
 export async function postToDiscord(
   webhookUrl: string,
   embeds: DiscordEmbed[],
   fetchImpl: FetchLike = fetch,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  buttons: LinkButton[] = [],
 ): Promise<void> {
+  const links = buttons.filter((b) => /^https?:\/\//.test(b.url)).slice(0, 5);
   const url = new URL(webhookUrl);
   url.searchParams.set('wait', 'true');
+  if (links.length) url.searchParams.set('with_components', 'true');
   // Titles come from file names and metadata: never let them ping anyone.
-  const body = JSON.stringify({ embeds, allowed_mentions: { parse: [] } });
+  const body = JSON.stringify({
+    embeds,
+    allowed_mentions: { parse: [] },
+    ...(links.length ? { components: [{ type: 1, components: links.map((b) => ({ type: 2, style: 5, label: b.label.slice(0, 80), url: b.url })) }] } : {}),
+  });
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response;
     try {
@@ -66,6 +79,8 @@ export async function postToDiscord(
     if (res.status === 401 || res.status === 403 || res.status === 404) {
       throw new DiscordError('Discord says this webhook doesn’t exist any more. It may have been deleted; paste a new one.', res.status, true);
     }
+    // If Discord won't take the buttons, the post matters more: send it without them.
+    if (res.status === 400 && links.length) return postToDiscord(webhookUrl, embeds, fetchImpl, sleep, []);
     throw new DiscordError(`Discord answered ${res.status}${detail?.message ? `: ${detail.message}` : ''}`, res.status);
   }
   throw new DiscordError('Discord kept asking Almanac to slow down. It will try again shortly.', 429);
