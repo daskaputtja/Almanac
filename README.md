@@ -1,11 +1,21 @@
 # Almanac
 
-**Monitoring, history and statistics for your [Silo](https://siloserver.org) media server.**
+**An assistant for running a [Silo](https://siloserver.org) media server: it watches, explains and suggests, so your team can decide.**
 
-Almanac is a self-hosted companion dashboard for Silo. It shows who is watching what right now, keeps a permanent record of every play, and turns that history into stats and graphs.
+Almanac is a self-hosted companion for Silo. It shows who is watching what right now and keeps a permanent record of every play. It also spots accounts worth a look, explains viewers' playback problems with fixes for their device, and gives your mods and admins what they need to act.
 
 > [!WARNING]
-> Almanac is in early development. Silo itself is pre-release, and its API may change before 1.0. Silo itself is pre-release, and its API may change before 1.0.
+> Almanac is in early development. Silo itself is pre-release, and its API may change before 1.0.
+
+## What Almanac is (and isn't)
+
+Almanac is an **assistant**, not a billing platform and not an enforcer.
+
+- **Almanac notices, explains and suggests.** It flags unusual accounts with the evidence, tells you why someone's streams are struggling and what to try on their device, forecasts when the server will run out of room, and keeps the record: notes, case files, who did what.
+- **People decide.** Mods review flags and ask for suspensions; admins approve or reject them. Even automatic requests wait for an admin.
+- **Your billing system enforces and bills.** Almanac never charges anyone, holds plans or prices, or turns a Silo account off itself (its Silo key is read-only). An approved suspension is handed to your billing portal or WHMCS, which does what it already does for non-payment. The usage figures Almanac offers (streams at once, devices, hours) are facts your billing system can read; Almanac doesn't act on them.
+
+A good test for new ideas: if something would make Almanac decide or charge on its own, it belongs somewhere else.
 
 ![The Almanac Activity page, showing live streams with demo data](docs/activity.png)
 
