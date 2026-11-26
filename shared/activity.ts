@@ -1,3 +1,4 @@
+import type { ViewerNetwork } from './geo.js';
 /**
  * Almanac's own view of a live stream.
  *
@@ -44,6 +45,8 @@ export interface ActivityStream {
     deviceId: string | null;
     ip: string | null;
     location: StreamLocation;
+    /** Who operates their network (operator for admins only), when known. */
+    network?: ViewerNetwork | null;
   };
   playback: {
     method: PlayMethod;

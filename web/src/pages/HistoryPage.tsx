@@ -374,7 +374,7 @@ function HistoryRow({ entry, expanded, onToggle }: { entry: HistoryEntry; expand
         )}
       </td>
       <td className="max-w-[12rem] truncate px-3 py-2.5 text-ink-muted">
-        {[entry.client.name, platformLabel(entry.client.platform)].filter(Boolean).join(' · ') || '—'}
+        {[entry.client.name || 'Unknown app', platformLabel(entry.client.platform)].filter(Boolean).join(' · ')}
       </td>
       <td className="whitespace-nowrap px-3 py-2.5 text-xs">
         <MethodBadge method={entry.playback.method} />
@@ -430,9 +430,12 @@ function HistoryDetails({ entry }: { entry: HistoryEntry }) {
     ['Video', decision(entry.playback.videoDecision)],
     ['Audio', decision(entry.playback.audioDecision)],
     ['Subtitles', entry.subtitle ? [entry.subtitle.language?.toUpperCase(), codecLabel(entry.subtitle.codec)].filter(Boolean).join(' ') : 'None'],
-    ['Player', [entry.client.name, entry.client.version].filter(Boolean).join(' ') || '—'],
+    ['Player', [entry.client.name, entry.client.version].filter(Boolean).join(' ') || 'Unknown app (it didn’t say what it is)'],
     ['Platform', platformLabel(entry.client.platform) ?? '—'],
     ...(entry.client.ip ? ([['IP address', entry.client.ip]] as [string, React.ReactNode][]) : []),
+    ...(entry.client.network
+      ? ([['Network', `${entry.client.network.operator ?? 'Unknown operator'} · ${entry.client.network.vpn ? 'VPN or data centre' : 'home or mobile'}`]] as [string, React.ReactNode][])
+      : []),
     ['Ended because', endReasonLabel(entry.endReason)],
   ];
 

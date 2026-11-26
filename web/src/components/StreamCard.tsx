@@ -106,13 +106,15 @@ export function StreamCard({ stream, position, liveNetworks = 1 }: Props) {
             )}
             <Row label="Bandwidth">{formatBitrate(stream.bandwidth.streamKbps)}</Row>
             <Row label="Player">
-              {[client.name, platformLabel(client.platform)].filter(Boolean).join(' · ') || 'Unknown'}
+              {[client.name || 'Unknown app', platformLabel(client.platform)].filter(Boolean).join(' · ')}
             </Row>
             <Row label="Location">
               <span className="text-ink">
                 {client.location === 'local' ? 'Local' : 'Remote'}
               </span>
               {client.ip && <span className="text-ink-muted"> · {client.ip}</span>}
+              {client.network?.operator && <span className="text-ink-muted"> · {client.network.operator}</span>}
+              {client.network?.vpn && <VpnBadge />}
             </Row>
           </dl>
         </div>
@@ -163,6 +165,18 @@ function describeTrack(
   if (decision === 'transcode') return `${from} (transcode)`;
   if (decision === 'remux' || decision === 'copy') return `${from} (copy)`;
   return from;
+}
+
+/** A VPN or data-centre connection: where it appears to be isn't where the viewer is. */
+export function VpnBadge() {
+  return (
+    <span
+      className="ml-1.5 inline-block rounded border border-[#9085e9]/60 px-1 text-[10px] font-semibold uppercase tracking-wide text-ink"
+      title="A VPN or data-centre connection: its location isn’t where the viewer is"
+    >
+      VPN
+    </span>
+  );
 }
 
 function Poster({ url, title }: { url: string | null; title: string }) {

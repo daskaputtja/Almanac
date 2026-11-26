@@ -20,7 +20,9 @@ export type FlagKind =
   /** Many devices registered to the account and in use. */
   | 'many_registered_devices'
   /** Played in two places too far apart to travel between in the time. */
-  | 'impossible_travel';
+  | 'impossible_travel'
+  /** Many different titles opened in a day with almost nothing watched: a tool working through the library. */
+  | 'bulk_opening';
 
 export type FlagGroup = 'sharing' | 'nonstop' | 'ripping';
 
@@ -36,6 +38,7 @@ export const FLAG_GROUP: Record<FlagKind, FlagGroup> = {
   heavy_downloads: 'ripping',
   many_registered_devices: 'sharing',
   impossible_travel: 'sharing',
+  bulk_opening: 'ripping',
 };
 
 export const GROUP_LABELS: Record<FlagGroup, { title: string; meaning: string }> = {
@@ -208,7 +211,8 @@ export type ThresholdKey =
   | 'devicesRegistered'
   | 'travelDays'
   | 'downloadsInWindow'
-  | 'downloadGbInWindow';
+  | 'downloadGbInWindow'
+  | 'titlesOpenedPerDay';
 
 export type FlagThresholds = Record<ThresholdKey, ThresholdLevels>;
 
@@ -228,6 +232,7 @@ export const DEFAULT_THRESHOLDS: FlagThresholds = {
   travelDays: { enabled: true, low: 4, medium: 6 },
   downloadsInWindow: { enabled: true, medium: 40, high: 80 },
   downloadGbInWindow: { enabled: true, medium: 200, high: 400 },
+  titlesOpenedPerDay: { enabled: true, low: 40, medium: 60, high: 150 },
 };
 
 export interface ThresholdInfo {
@@ -325,6 +330,16 @@ export const THRESHOLD_INFO: Record<ThresholdKey, ThresholdInfo> = {
     min: 2,
     max: 2000,
   },
+  titlesOpenedPerDay: {
+    group: 'ripping',
+    label: 'Titles opened but not watched in a day',
+    description:
+      'Different movies and shows started within 24 hours and left with under 2 minutes watched (a show’s episodes count once). People skimming rarely reach 20; a tool scanning or copying the library opens hundreds.',
+    unit: 'titles',
+    levels: ['low', 'medium', 'high'],
+    min: 5,
+    max: 10000,
+  },
   downloadGbInWindow: {
     group: 'ripping',
     label: 'Offline download size in a week',
@@ -389,6 +404,7 @@ export const THRESHOLD_KIND: Record<ThresholdKey, FlagKind> = {
   travelDays: 'impossible_travel',
   downloadsInWindow: 'heavy_downloads',
   downloadGbInWindow: 'heavy_downloads',
+  titlesOpenedPerDay: 'bulk_opening',
 };
 
 export interface PreviewCounts {

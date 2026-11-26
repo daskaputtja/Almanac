@@ -1,3 +1,4 @@
+import type { ViewerNetwork } from './geo.js';
 import type { UserHealthResponse } from './health.js';
 import type { RegisteredDevice, UserDownloads } from './accounts.js';
 
@@ -33,7 +34,7 @@ export interface UserDetail extends UserSummary {
   firstPlayedAt: string | null;
   profiles: { name: string; plays: number; lastPlayedAt: string }[];
   devices: { player: string; platform: string | null; plays: number; lastPlayedAt: string }[];
-  addresses: { ip: string; plays: number; firstSeenAt: string; lastSeenAt: string }[];
+  addresses: { ip: string; plays: number; firstSeenAt: string; lastSeenAt: string; network?: ViewerNetwork | null }[];
   /** Offline downloads (download addresses only for admins). */
   downloads: UserDownloads;
   /** Devices signed in to the account in Silo. */

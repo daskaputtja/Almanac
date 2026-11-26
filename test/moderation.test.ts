@@ -442,3 +442,81 @@ describe('case file', () => {
     expect(service.caseFile('nobody', suspensions, { actor: mod, includeAdminDetails: false })).toBeNull();
   });
 });
+
+describe('VPNs and no-progress plays', () => {
+  const vpnIps = new Set(['185.1.1.1', '185.2.2.2', '185.3.3.3', '185.4.4.4']);
+  const where: Record<string, { country: string; city: string; lat: number; lon: number }> = {
+    '203.0.113.10': { country: 'GB', city: 'London', lat: 51.5, lon: -0.1 },
+    '198.51.100.4': { country: 'GB', city: 'Leeds', lat: 53.8, lon: -1.5 },
+    '185.1.1.1': { country: 'US', city: 'New York', lat: 40.7, lon: -74 },
+    '185.2.2.2': { country: 'DE', city: 'Frankfurt', lat: 50.1, lon: 8.7 },
+    '185.3.3.3': { country: 'GL', city: 'Tasiilaq', lat: 65.6, lon: -37.6 },
+    '185.4.4.4': { country: 'FR', city: 'Paris', lat: 48.9, lon: 2.3 },
+  };
+  const locate = (ip: string) => (where[ip] ? { ...where[ip]!, vpn: vpnIps.has(ip), operator: vpnIps.has(ip) ? 'M247 Europe SRL' : 'British Telecommunications PLC' } : null);
+
+  it('classifies operators', async () => {
+    const { classifyNetwork } = await import('../server/geo/network.js');
+    expect(classifyNetwork('Proton AG')).toBe('vpn');
+    expect(classifyNetwork('Datacamp Limited')).toBe('vpn');
+    expect(classifyNetwork('Some Hosting Ltd')).toBe('vpn');
+    expect(classifyNetwork('British Telecommunications PLC')).toBe('isp');
+    expect(classifyNetwork('Space Exploration Technologies Corporation')).toBe('isp');
+    expect(classifyNetwork('T-Mobile USA, Inc.')).toBe('isp');
+    expect(classifyNetwork(null)).toBe('unknown');
+  });
+
+  it('counts every VPN server as one network, and ignores VPN locations for travel', () => {
+    // One person hopping between VPN servers all week, on two devices.
+    const plays = [...vpnIps].flatMap((ip, i) => [
+      play(i * 24, 1, { ip, deviceId: 'tv' }),
+      play(i * 24 + 1.05, 1, { ip: [...vpnIps][(i + 1) % 4], deviceId: 'phone' }),
+    ]);
+    plays.push(play(100, 1, { ip: '203.0.113.10', deviceId: 'tv' }));
+    const flags = detectFlags(plays, 7, [], THRESHOLDS, undefined, locate);
+    expect(kinds(flags)).not.toContain('impossible_travel');
+    expect(kinds(flags)).not.toContain('many_networks');
+
+    // Without knowing they're VPNs, the same plays look like travel between continents.
+    const naive = detectFlags(plays, 7, [], { ...THRESHOLDS, travelDays: { enabled: true, low: 1, medium: 2 } }, undefined, (ip) =>
+      where[ip] ? { ...where[ip]! } : null,
+    );
+    expect(kinds(naive)).toContain('impossible_travel');
+  });
+
+  it('still catches two real households, and says when one stream was a VPN', () => {
+    const plays = [
+      play(10, 2, { ip: '203.0.113.10', deviceId: 'a' }),
+      play(10.2, 2, { ip: '198.51.100.4', deviceId: 'b' }),
+      play(10.3, 2, { ip: '185.1.1.1', deviceId: 'c' }),
+      play(10.4, 2, { ip: '185.2.2.2', deviceId: 'd' }),
+    ];
+    const flag = detectFlags(plays, 7, [], THRESHOLDS, undefined, locate).find((f) => f.kind === 'concurrent_networks')!;
+    expect(flag.headline).toBe('Streamed from 3 different networks at the same time'); // London, Leeds and "a VPN"
+    expect(flag.details.join(' ')).toMatch(/One of them was a VPN/);
+  });
+
+  it('counts plays that never report progress for sharing, but not for playback time', () => {
+    const ips = ['203.0.113.10', '198.51.100.4', '192.0.2.8', '198.18.0.1'];
+    const plays = Array.from({ length: 12 }, (_, i) => play(i * 12, 0.5, { ip: `${ips[i % 4]!.split('.').slice(0, 2).join('.')}.${i}.1`, deviceId: `d${i}`, watchedSeconds: 0 }));
+    const flags = detectFlags(plays, 7);
+    expect(kinds(flags)).toContain('many_networks');
+    expect(kinds(flags)).not.toContain('heavy_daily');
+  });
+
+  it('flags a tool opening hundreds of titles without watching, but not skipping through one show', () => {
+    const scan = Array.from({ length: 200 }, (_, i) =>
+      play(i * 0.002, 0.08, { title: `Film ${i}`, seriesTitle: null, mediaType: 'movie', watchedSeconds: null, endReason: 'expired', player: null, deviceId: null }),
+    );
+    const flag = detectFlags(scan, 7).find((f) => f.kind === 'bulk_opening')!;
+    expect(flag.severity).toBe('high');
+    expect(flag.headline).toBe('Opened 200 different titles in a day without watching them');
+    expect(flag.details.join(' ')).toMatch(/usually 7 seconds apart.*doesn’t say what it is.*on one network/s);
+
+    const skipping = Array.from({ length: 80 }, (_, i) => play(i * 0.01, 0.01, { title: `Episode ${i}`, seriesTitle: 'Captain Tsubasa', watchedSeconds: 20 }));
+    expect(kinds(detectFlags(skipping, 7))).not.toContain('bulk_opening');
+    // Older history without progress or an ending isn't counted at all.
+    const old = scan.map((p) => ({ ...p, endReason: null }));
+    expect(kinds(detectFlags(old, 7))).not.toContain('bulk_opening');
+  });
+});

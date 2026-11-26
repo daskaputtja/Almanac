@@ -30,3 +30,10 @@ export interface GeoResponse {
   /** Plays whose address hasn't been located (yet, or not in the database). */
   unknown: number;
 }
+
+/** Who operates a viewer's network, and whether it's a VPN or data centre rather than a home or mobile connection. */
+export interface ViewerNetwork {
+  /** The operator's name, e.g. "British Telecommunications PLC" or "Proton AG". Only sent to admins. */
+  operator: string | null;
+  vpn: boolean;
+}

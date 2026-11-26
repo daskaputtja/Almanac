@@ -1,3 +1,4 @@
+import type { ViewerNetwork } from './geo.js';
 import type { PlayMethod } from './activity.js';
 
 /** One finished play, as stored in Almanac's database. */
@@ -36,6 +37,8 @@ export interface HistoryEntry {
     platform: string | null;
     ip: string | null;
     deviceId: string | null;
+    /** Who operates their network (operator for admins only), when known. */
+    network?: ViewerNetwork | null;
   };
   subtitle: { language: string | null; codec: string | null } | null;
   endReason: string | null;

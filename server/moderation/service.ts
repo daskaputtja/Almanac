@@ -157,7 +157,7 @@ export class ModerationService {
       .prepare(
         `SELECT user_id, started_at, ended_at, media_type, title, series_title, watched_seconds, paused_seconds,
                 completed, duration_seconds, client_ip, device_id, client_name, end_reason
-         FROM plays WHERE started_at >= ? AND (watched_seconds IS NULL OR watched_seconds >= 30)`,
+         FROM plays WHERE started_at >= ?`,
       )
       .all(since) as {
       user_id: string;
@@ -221,10 +221,10 @@ export class ModerationService {
       (
         this.db
           .prepare(
-            'SELECT ip, country_code, city, latitude, longitude FROM ip_locations WHERE country_code IS NOT NULL AND ip IN (SELECT DISTINCT client_ip FROM plays WHERE started_at >= ?)',
+            'SELECT ip, country_code, city, latitude, longitude, operator, network_kind FROM ip_locations WHERE country_code IS NOT NULL AND ip IN (SELECT DISTINCT client_ip FROM plays WHERE started_at >= ?)',
           )
-          .all(since) as { ip: string; country_code: string; city: string | null; latitude: number | null; longitude: number | null }[]
-      ).map((r) => [r.ip, { country: r.country_code, city: r.city, lat: r.latitude, lon: r.longitude }]),
+          .all(since) as { ip: string; country_code: string; city: string | null; latitude: number | null; longitude: number | null; operator: string | null; network_kind: string | null }[]
+      ).map((r) => [r.ip, { country: r.country_code, city: r.city, lat: r.latitude, lon: r.longitude, vpn: r.network_kind === 'vpn', operator: r.operator }]),
     );
     const locate: Locate = (ip) => places.get(ip) ?? null;
 

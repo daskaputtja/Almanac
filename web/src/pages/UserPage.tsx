@@ -213,8 +213,14 @@ export function UserPage({ userId }: { userId: string }) {
           {canSeeIps && (
             <SimpleTable
               title="IP addresses"
-              headers={['Address', 'Plays', 'First seen', 'Last seen']}
-              rows={user.addresses.map((a) => [a.ip, a.plays.toLocaleString(), formatWhen(a.firstSeenAt), formatWhen(a.lastSeenAt)])}
+              headers={['Address', 'Network', 'Plays', 'First seen', 'Last seen']}
+              rows={user.addresses.map((a) => [
+                a.ip,
+                a.network ? `${a.network.operator ?? 'Unknown'}${a.network.vpn ? ' (VPN)' : ''}` : '—',
+                a.plays.toLocaleString(),
+                formatWhen(a.firstSeenAt),
+                formatWhen(a.lastSeenAt),
+              ])}
               note={user.addresses.length === 50 ? 'Showing the 50 most recent addresses.' : undefined}
             />
           )}

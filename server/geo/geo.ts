@@ -4,8 +4,9 @@ import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { Reader } from 'mmdb-lib';
 import type { SQLInputValue } from 'node:sqlite';
-import type { GeoResponse } from '../../shared/geo.js';
+import type { GeoResponse, ViewerNetwork } from '../../shared/geo.js';
 import { type Database, transaction } from '../db/database.js';
+import { classifyNetwork } from './network.js';
 
 /**
  * DB-IP's free "IP to City Lite" database (CC BY 4.0), as published on npm
@@ -16,6 +17,9 @@ import { type Database, transaction } from '../db/database.js';
 const PACKAGE = '@ip-location-db/dbip-city-mmdb';
 const REGISTRY = 'https://registry.npmjs.org';
 const FILES = ['dbip-city-ipv4.mmdb', 'dbip-city-ipv6.mmdb'] as const;
+/** Who operates each network (ASN), from DB-IP and RouteViews, for telling VPNs from home connections. */
+const ASN_PACKAGE = '@ip-location-db/asn-mmdb';
+const ASN_FILE = 'asn.mmdb';
 const REFRESH_DAYS = 30;
 const RELOOKUP_DAYS = 60;
 const BATCH = 20_000;
@@ -109,9 +113,111 @@ export class GeoService {
       if (this.ready()) this.lookupPending();
     } catch (err) {
       this.log(`Viewer locations: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    try {
+      await this.ensureAsnDatabase();
+      if (this.asnReady()) this.lookupNetworks();
+    } catch (err) {
+      this.log(`Viewer networks: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       this.busy = false;
     }
+  }
+
+  private asnReader: { version: string; reader: Reader<Record<string, unknown>> } | null = null;
+  private networkCache = new Map<string, ViewerNetwork | null>();
+
+  /** Who operates an address and whether it's a VPN or data centre. Null for local addresses or before the database is ready. */
+  networkFor(ip: string | null | undefined): ViewerNetwork | null {
+    if (!ip || isPrivateAddress(ip)) return null;
+    const meta = this.asnMeta();
+    if (!meta || !this.asnReady()) return null;
+    if (this.asnReader?.version !== meta.version) {
+      this.asnReader = { version: meta.version, reader: new Reader(readFileSync(join(this.dir, ASN_FILE))) };
+      this.networkCache.clear();
+    }
+    if (this.networkCache.has(ip)) return this.networkCache.get(ip)!;
+    let operator: string | null = null;
+    try {
+      operator = ((this.asnReader.reader.get(ip.replace(/^::ffff:/, '')) as { autonomous_system_organization?: string } | null)?.autonomous_system_organization) || null;
+    } catch {
+      operator = null;
+    }
+    const kind = classifyNetwork(operator);
+    const result: ViewerNetwork | null = kind === 'unknown' ? null : { operator, vpn: kind === 'vpn' };
+    if (this.networkCache.size > 20_000) this.networkCache.clear();
+    this.networkCache.set(ip, result);
+    return result;
+  }
+
+  asnMeta(): Meta | null {
+    try {
+      return JSON.parse(readFileSync(join(this.dir, 'asn-meta.json'), 'utf8')) as Meta;
+    } catch {
+      return null;
+    }
+  }
+
+  asnReady(): boolean {
+    return Boolean(this.asnMeta()) && existsSync(join(this.dir, ASN_FILE));
+  }
+
+  /** Download the network operator database (about 10 MB) if it's missing or a month old. */
+  async ensureAsnDatabase(): Promise<void> {
+    const meta = this.asnMeta();
+    if (meta && this.asnReady() && Date.now() - Date.parse(meta.downloadedAt) < REFRESH_DAYS * 86_400_000) return;
+    const latest = await this.json<{ version: string; dist: { tarball: string; integrity?: string } }>(`${REGISTRY}/${ASN_PACKAGE}/latest`);
+    const writeAsnMeta = (m: Meta) => {
+      mkdirSync(this.dir, { recursive: true });
+      writeFileSync(join(this.dir, 'asn-meta.json'), JSON.stringify(m, null, 2));
+    };
+    if (meta && this.asnReady() && meta.version === latest.version) {
+      writeAsnMeta({ ...meta, downloadedAt: new Date().toISOString() });
+      return;
+    }
+    this.log(`Downloading the network operator database (${latest.version}, about 10 MB)…`);
+    const res = await this.fetchImpl(latest.dist.tarball, { signal: AbortSignal.timeout(10 * 60_000) });
+    if (!res.ok) throw new Error(`download failed: ${res.status}`);
+    const tarball = Buffer.from(await res.arrayBuffer());
+    const [algorithm, expected] = (latest.dist.integrity ?? '').split('-', 2);
+    if (algorithm !== 'sha512' || !expected) throw new Error('npm gave no checksum for the download, so it was not used.');
+    if (createHash('sha512').update(tarball).digest('base64') !== expected) throw new Error('the download didn’t match its checksum, so it was not used.');
+    const data = untar(gunzipSync(tarball)).get(ASN_FILE);
+    if (!data) throw new Error(`${ASN_FILE} was missing from the download.`);
+    const reader = new Reader(Buffer.from(data)); // throws if the file is damaged
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(join(this.dir, `${ASN_FILE}.tmp`), data);
+    renameSync(join(this.dir, `${ASN_FILE}.tmp`), join(this.dir, ASN_FILE));
+    writeAsnMeta({ version: latest.version, downloadedAt: new Date().toISOString(), buildDate: buildDateOf(reader.metadata.buildEpoch) });
+    // Check every address again with the new data.
+    this.db.prepare('UPDATE ip_locations SET network_kind = NULL').run();
+    this.log('Network operator database ready.');
+  }
+
+  /** Work out who operates located addresses that haven't been checked, and whether each is a VPN. */
+  lookupNetworks(): number {
+    const ips = (this.db.prepare('SELECT ip, country_code FROM ip_locations WHERE network_kind IS NULL LIMIT ?').all(BATCH) as { ip: string; country_code: string | null }[]);
+    if (!ips.length) return 0;
+    const reader = new Reader(readFileSync(join(this.dir, ASN_FILE)));
+    const update = this.db.prepare('UPDATE ip_locations SET asn = ?, operator = ?, network_kind = ? WHERE ip = ?');
+    transaction(this.db, () => {
+      for (const { ip, country_code } of ips) {
+        if (country_code === 'LAN' || isPrivateAddress(ip)) {
+          update.run(null, null, 'lan', ip);
+          continue;
+        }
+        type AsnRecord = { autonomous_system_number?: number; autonomous_system_organization?: string };
+        let record: AsnRecord | null;
+        try {
+          record = reader.get(ip.replace(/^::ffff:/, '')) as unknown as AsnRecord | null;
+        } catch {
+          record = null;
+        }
+        const operator = record?.autonomous_system_organization || null;
+        update.run(record?.autonomous_system_number ?? null, operator, classifyNetwork(operator), ip);
+      }
+    });
+    return ips.length;
   }
 
   /** Download the location database if it's missing or a month old. */

@@ -123,7 +123,11 @@ export function parseStatsQuery(params: Record<string, string | undefined>): Sta
 
 /** A copy of the activity snapshot without viewers' IP addresses. */
 export function withoutIps(snapshot: ActivitySnapshot): ActivitySnapshot {
-  return { ...snapshot, streams: snapshot.streams.map((s) => ({ ...s, client: { ...s.client, ip: null } })) };
+  // Mods can know a stream is on a VPN, but not the address or who runs it.
+  return {
+    ...snapshot,
+    streams: snapshot.streams.map((s) => ({ ...s, client: { ...s.client, ip: null, network: s.client.network ? { operator: null, vpn: s.client.network.vpn } : null } })),
+  };
 }
 
 function userWithoutIps(user: UserDetail): UserDetail {
@@ -192,7 +196,12 @@ export function createApp(
   // Mods don't see viewers' IP addresses; they're removed before anything is sent.
   const seesIps = (c: { get: (key: 'session') => AuthEnv['Variables']['session'] }) => can(c.get('session').user.role, 'viewIpAddresses');
 
-  app.get('/api/activity', (c) => c.json(seesIps(c) ? monitor.current() : withoutIps(monitor.current())));
+  /** Add who operates each stream's network. */
+  const withNetworks = (snapshot: ActivitySnapshot): ActivitySnapshot => ({
+    ...snapshot,
+    streams: snapshot.streams.map((s) => ({ ...s, client: { ...s.client, network: geo.networkFor(s.client.ip) } })),
+  });
+  app.get('/api/activity', (c) => c.json(seesIps(c) ? withNetworks(monitor.current()) : withoutIps(withNetworks(monitor.current()))));
 
   app.get('/api/activity/stream', (c) =>
     streamSSE(c, async (stream) => {
@@ -201,7 +210,7 @@ export function createApp(
         stream.writeSSE({ event: 'activity', id: String(id++), data: JSON.stringify(snapshot) });
 
       const ips = seesIps(c);
-      const view = (snapshot: ActivitySnapshot) => (ips ? snapshot : withoutIps(snapshot));
+      const view = (snapshot: ActivitySnapshot) => (ips ? withNetworks(snapshot) : withoutIps(withNetworks(snapshot)));
       await send(view(monitor.current()));
       const unsubscribe = monitor.subscribe((snapshot) => void send(view(snapshot)).catch(() => {}));
 
@@ -265,7 +274,12 @@ export function createApp(
     }
   });
 
-  app.get('/api/history', (c) => c.json(history.query(parseHistoryQuery(c.req.query()), { includeIp: seesIps(c) })));
+  app.get('/api/history', (c) => {
+    const page = history.query(parseHistoryQuery(c.req.query()), { includeIp: seesIps(c) });
+    // Admins see who runs each address; nobody else gets addresses at all.
+    if (seesIps(c)) for (const e of page.items) e.client.network = geo.networkFor(e.client.ip);
+    return c.json(page);
+  });
   app.get('/api/history/filters', (c) => c.json(history.filterOptions()));
   app.get('/api/history/status', (c) => c.json(historySync.status()));
   app.get('/api/stats', (c) => c.json(stats.get(parseStatsQuery(c.req.query()))));
@@ -280,6 +294,7 @@ export function createApp(
     const found = users.get(c.req.param('id'));
     if (!found) return c.json({ error: 'No such user' }, 404);
     const user = { ...found, downloads: accounts.forUser(found.id, seesIps(c)), registeredDevices: accounts.devicesForUser(found.id), health: health.forUser(found.id) };
+    if (seesIps(c)) for (const a of user.addresses) a.network = geo.networkFor(a.ip);
     return c.json(seesIps(c) ? user : userWithoutIps(user));
   });
   app.get('/api/downloads', (c) => c.json(accounts.overview(seesIps(c))));

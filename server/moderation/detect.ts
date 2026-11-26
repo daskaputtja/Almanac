@@ -42,8 +42,17 @@ export interface PlayForDetection {
   endReason?: string | null;
 }
 
-/** Where an address is, from the local geolocation database. */
-export type Locate = (ip: string) => { country: string; city: string | null; lat?: number | null; lon?: number | null } | null;
+/** Where an address is, from the local geolocation database, and whether it's a VPN or data centre. */
+export type Locate = (
+  ip: string,
+) => { country: string; city: string | null; lat?: number | null; lon?: number | null; vpn?: boolean; operator?: string | null } | null;
+
+/** Every VPN or data-centre address counts as one network: hopping between VPN servers isn't more people. */
+export const VPN_NETWORK = 'VPN';
+/** For bulk opening: a play with less than this watched was opened, not watched. */
+const OPENED_NOT_WATCHED_SECONDS = 120;
+/** Plays with less than this watched don't count towards playback time. */
+const COUNTED_SECONDS = 30;
 
 /** Offline downloads and signed-in devices, from Silo's admin API. */
 export interface AccountExtras {
@@ -130,8 +139,14 @@ export function detectFlags(
     // (a phone that lost signal, say), so for being in two places at once its end
     // doesn't count.
     const liveUntil = p.endReason === 'expired' ? Math.max(start, end - STALE_SESSION_MS) : end;
-    return { play: p, start, end, liveUntil, network: networkOf(p.ip) };
+    const place = p.ip ? locate(p.ip) : null;
+    const vpn = Boolean(place?.vpn);
+    return { play: p, start, end, liveUntil, vpn, operator: place?.operator ?? null, network: vpn ? VPN_NETWORK : networkOf(p.ip) };
   });
+  // Playback time only counts plays that were actually watched; the sharing checks use every play,
+  // including ones from players that never report progress.
+  const watchedSpans = spans.filter((s) => s.play.watchedSeconds == null || s.play.watchedSeconds >= COUNTED_SECONDS);
+  const vpnOperators = (list: typeof spans) => [...new Set(list.filter((s) => s.vpn).map((s) => s.operator ?? 'unknown'))];
 
   // --- Several networks at the same moment ---------------------------------
   // At each play's start, which networks are playing?
@@ -162,7 +177,7 @@ export function detectFlags(
       };
     }
   }
-  const liveNetworks = new Set(live.map((l) => networkOf(l.ip)).filter((n): n is string => Boolean(n)));
+  const liveNetworks = new Set(live.map((l) => (l.ip && locate(l.ip)?.vpn ? VPN_NETWORK : networkOf(l.ip))).filter((n): n is string => Boolean(n)));
   const liveNow = liveNetworks.size >= lowest(T.concurrentNetworks);
   const concurrent = Math.max(worst.count, liveNetworks.size);
   const concurrentSeverity = severityFor(concurrent, T.concurrentNetworks);
@@ -177,9 +192,13 @@ export function detectFlags(
     const peakIps = liveNow && liveNetworks.size >= worst.count ? live.map((l) => l.ip).filter((ip): ip is string => Boolean(ip)) : worst.ips;
     const places = peakIps.map((ip) => locate(ip)).filter((l): l is NonNullable<ReturnType<Locate>> => Boolean(l) && l!.country !== 'LAN');
     const countries = [...new Set(places.map((l) => countryName(l.country)))];
-    const towns = [...new Set(places.map((l) => [l.city, countryName(l.country)].filter(Boolean).join(', ')))];
-    if (countries.length > 1) details.push(`At that moment the streams were in ${countries.length} different countries: ${countries.join(', ')}.`);
-    else if (countries.length === 1) details.push(`All in ${countries[0]}${towns.length > 1 ? `, in ${towns.length} different places` : ''}. Mobile data can make one phone look like it’s on several networks, so check the details.`);
+    const towns = [...new Set(places.map((l) => [l.city, countryName(l.country)].filter(Boolean).join(', ') + (l.vpn ? ` (VPN server${l.operator ? `, ${l.operator}` : ''})` : '')))];
+    const peakVpn = (liveNow && liveNetworks.size >= worst.count ? liveNetworks : new Set(worst.networks)).has(VPN_NETWORK);
+    if (peakVpn) details.push('One of them was a VPN. However many VPN servers they use, a VPN counts as one network.');
+    const realPlaces = places.filter((l) => !l.vpn);
+    const realCountries = [...new Set(realPlaces.map((l) => countryName(l.country)))];
+    if (realCountries.length > 1) details.push(`At that moment the streams were in ${realCountries.length} different countries: ${realCountries.join(', ')}.`);
+    else if (realCountries.length === 1 && !peakVpn) details.push(`All in ${countries[0]}${towns.length > 1 ? `, in ${towns.length} different places` : ''}. Mobile data can make one phone look like it’s on several networks, so check the details.`);
     flags.push({
       kind: 'concurrent_networks',
       severity: concurrentSeverity,
@@ -201,7 +220,8 @@ export function detectFlags(
   const trips: Trip[] = [];
   const located = spans.map((s) => {
     const l = s.play.ip ? locate(s.play.ip) : null;
-    return l && l.country !== 'LAN' && l.lat != null && l.lon != null ? { s, l } : null;
+    // A VPN server's location says nothing about where the viewer is.
+    return l && !l.vpn && l.country !== 'LAN' && l.lat != null && l.lon != null ? { s, l } : null;
   });
   for (let i = 0; i < spans.length; i++) {
     const b = located[i];
@@ -251,13 +271,18 @@ export function detectFlags(
   const allNetworks = [...new Set(spans.map((s) => s.network).filter((n): n is string => Boolean(n)))];
   const networkSeverity = severityFor(allNetworks.length, T.networksInWindow);
   if (networkSeverity) {
+    const vpnAddresses = new Set(spans.filter((s) => s.vpn).map((s) => networkOf(s.play.ip))).size;
+    const operators = vpnOperators(spans);
     flags.push({
       kind: 'many_networks',
       severity: networkSeverity,
       value: allNetworks.length,
       headline: `Used ${allNetworks.length} different networks in ${windowDays} days`,
-      details: ['Most people use 2 to 5. Phones on mobile data can add a few.'],
-      adminDetails: [`Networks: ${allNetworks.join(', ')}`],
+      details: [
+        'Most people use 2 to 5. Phones on mobile data can add a few.',
+        ...(vpnAddresses ? [`That counts their VPN once: they also used ${plural(vpnAddresses, 'VPN server network')}.`] : []),
+      ],
+      adminDetails: [`Networks: ${allNetworks.join(', ')}`, ...(operators.length ? [`VPN or data centre: ${operators.join(', ')}`] : [])],
     });
   }
 
@@ -291,7 +316,7 @@ export function detectFlags(
     busyMs += run.end - run.start;
     if (run.end - run.start > longest.ms) longest = { ms: run.end - run.start, start: run.start, end: run.end, titles: run.titles };
   };
-  for (const s of spans) {
+  for (const s of watchedSpans) {
     if (run && s.start - run.end <= CONTINUOUS_GAP_MS) {
       run.end = Math.max(run.end, s.end);
       run.titles++;
@@ -336,7 +361,7 @@ export function detectFlags(
   let streak = { ms: 0, titles: 0, movies: 0, start: 0, end: 0, shows: new Map<string, number>() };
   let best = { ...streak, shows: new Map<string, number>() };
   let prevEnd: number | null = null;
-  for (const s of spans) {
+  for (const s of watchedSpans) {
     const p = s.play;
     // Jumped to the end rather than watched: skipping through, not playing it.
     const skippedThrough =
@@ -378,7 +403,49 @@ export function detectFlags(
     });
   }
 
+  // --- Bulk opening ------------------------------------------------------------
+  // Many different titles started and left almost unwatched, within a day. People
+  // skimming open a handful; a tool scanning or copying the library opens
+  // hundreds, often seconds apart. A show's episodes count once, so skipping
+  // through a series doesn't count.
+  const opened = spans.filter((s) => (s.play.watchedSeconds != null ? s.play.watchedSeconds < OPENED_NOT_WATCHED_SECONDS : s.play.endReason != null));
+  let peak = { titles: 0, from: 0, to: 0, plays: 0 };
+  for (let i = 0, j = 0; i < opened.length; i++) {
+    while (opened[j]!.start < opened[i]!.start - 86_400_000) j++;
+    const slice = opened.slice(j, i + 1);
+    const titles = new Set(slice.map((s) => s.play.seriesTitle || s.play.title)).size;
+    if (titles > peak.titles) peak = { titles, from: slice[0]!.start, to: opened[i]!.start, plays: slice.length };
+  }
+  const bulkSeverity = severityFor(peak.titles, T.titlesOpenedPerDay);
+  if (bulkSeverity) {
+    const inPeak = opened.filter((s) => s.start >= peak.from && s.start <= peak.to);
+    const gaps = inPeak.slice(1).map((s, i) => (s.start - inPeak[i]!.start) / 1000).sort((a, b) => a - b);
+    const medianGap = gaps.length ? gaps[Math.floor(gaps.length / 2)]! : 0;
+    const apps = [...new Set(inPeak.map((s) => s.play.player || 'no app name'))];
+    const networks = new Set(inPeak.map((s) => s.network)).size;
+    const days = new Set(
+      opened.map((s) => new Date(s.start).toISOString().slice(0, 10)),
+    );
+    const busyDays = [...days].filter((d) => new Set(opened.filter((s) => new Date(s.start).toISOString().startsWith(d)).map((s) => s.play.seriesTitle || s.play.title)).size >= lowest(T.titlesOpenedPerDay)).length;
+    flags.push({
+      kind: 'bulk_opening',
+      severity: bulkSeverity,
+      value: peak.titles,
+      headline: `Opened ${peak.titles} different titles in a day without watching them`,
+      details: [
+        `Between ${when(peak.from)} and ${when(peak.to)}: ${plural(peak.plays, 'stream')} started${medianGap ? `, usually ${formatSeconds(medianGap)} apart` : ''}, each left with under 2 minutes watched.`,
+        `${apps.length === 1 ? `All from ${apps[0] === 'no app name' ? 'a player that doesn’t say what it is (Silo’s own apps always do)' : apps[0]}` : `From ${apps.slice(0, 3).join(', ')}`}${networks === 1 ? ', on one network' : ''}.${busyDays > 1 ? ` It happened on ${busyDays} days this week.` : ''}`,
+        'That’s what a tool scanning or copying the library looks like, rather than someone choosing what to watch.',
+      ],
+      adminDetails: [],
+    });
+  }
+
   return flags;
+}
+
+function formatSeconds(s: number): string {
+  return s < 90 ? `${Math.round(s)} seconds` : `${Math.round(s / 60)} minutes`;
 }
 
 /** Flags from offline downloads and signed-in devices. */

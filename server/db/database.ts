@@ -379,6 +379,11 @@ const MIGRATIONS: string[] = [
       PRIMARY KEY (user_id, flag_group)
     );
   `,
+  /* 20: who operates each viewer address, and whether it's a VPN or data centre */ `
+    ALTER TABLE ip_locations ADD COLUMN asn INTEGER;
+    ALTER TABLE ip_locations ADD COLUMN operator TEXT;
+    ALTER TABLE ip_locations ADD COLUMN network_kind TEXT;   -- vpn, isp, lan or unknown; NULL until checked
+  `,
 ];
 
 export type Database = DatabaseSync;

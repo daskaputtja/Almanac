@@ -59,7 +59,7 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - **Account flags**, checked every 5 minutes over the last 7 days:
   - *Possible account sharing:* 3 or more different networks at the same time, 10 or more networks in a week, 7 or more devices in a week, 15 or more devices signed in to the account and used in the last 30 days, or *impossible travel* on 4 or more days in a week (two different devices playing over 300 miles apart, closer together in time than anyone could travel)
   - *Non-stop playback* (restreaming, or a TV left on): 24 hours or more without a break, or 12 or more hours a day on average
-  - *Possible ripping:* 40 or more offline downloads (or 200 GB or more) in a week; or 8 or more hours of titles watched to the end back to back with no pauses (never more than "worth a look" on its own, since autoplay with the TV left on looks the same). Titles skipped through to the end don't count
+  - *Possible ripping:* 40 or more offline downloads (or 200 GB or more) in a week; or 8 or more hours of titles watched to the end back to back with no pauses (never more than "worth a look" on its own, since autoplay with the TV left on looks the same). Titles skipped through to the end don't count; or 40 or more different movies and shows opened in a day and left with under 2 minutes watched (a show's episodes count once), which is how a tool scanning or copying the library looks
 - Severity on each flag (minor, worth a look, serious), with the evidence and when it happened
 - *Mark as reviewed* with a note; a reviewed flag reopens if the behaviour gets clearly worse
 - **Exceptions:** allow an account something that would otherwise be flagged (a family in two houses, downloads before flights), for 30 days, 90 days, a year or until removed, with a reason other mods can see. Choose whether serious flags of that kind still show. Add one from a flag (*Allow this…*) or the user's page; the Moderation page lists them all
@@ -69,6 +69,8 @@ Almanac is a self-hosted companion dashboard for Silo. It shows who is watching 
 - Shared **notes** and **tags** on any user (for example VIP, Family, Warned), with tags shown next to their name everywhere
 
 Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and all private addresses count as one home network), so phones changing address don't cause flags. A device only counts in one place at a time, a stream that timed out stops counting 10 minutes before Silo gave up on it, and web browsers count as one device per network, so a phone switching from Wi-Fi to mobile data or a cleared browser doesn't look like sharing. Flags for streams at the same time say which countries they were in (and which towns, for admins). Mods see the counts and evidence but never the addresses.
+
+**VPNs:** Almanac looks up who operates each address (DB-IP's free ASN database, on your own server). VPN services run on data-centre networks (M247, Datacamp, PacketHub, Proton and so on), not home or mobile broadband, so a VPN can be told apart from a household. Every VPN server counts as one network, and impossible travel ignores VPN locations, since a VPN server's location says nothing about where the viewer is. Activity shows a **VPN** badge; admins also see the operator on Activity, History and user pages. Plays from players that never report progress still count for the sharing checks (not for playback time), and players that don't say what they are show as **Unknown app**.
 
 ### Yearly recap ✅
 - A "year in review" for each user and for the whole server: hours watched, plays, movies, episodes and active days
@@ -178,7 +180,7 @@ The `/data` volume holds Almanac's database. Keep it, or Almanac will have to im
 | `SILO_URL` | Yes | | Your Silo server's address, e.g. `https://silo.example.com` |
 | `SILO_API_KEY` | Yes | | The API key from step 1 |
 | `TRUST_PROXY` | No | `false` | Set to `true` behind a reverse proxy, so Almanac sees visitors' real IP addresses and HTTPS |
-| `GEOLOCATION` | No | `on` | Set to `off` to turn off the viewer map. When on, Almanac downloads DB-IP's free city database (about 130 MB) once a month |
+| `GEOLOCATION` | No | `on` | Set to `off` to turn off the viewer map. When on, Almanac downloads DB-IP's free city database (about 130 MB) and network operator database (about 10 MB) once a month. Off also turns off VPN detection |
 | `SECURE_COOKIES` | No | `auto` | `auto` marks the sign-in cookie HTTPS-only when the request came over HTTPS; or `always` / `never` |
 | `ALMANAC_USERNAME` | No | | Creates the first account on startup instead of using the setup page. You still set up 2FA at first sign-in |
 | `ALMANAC_PASSWORD` | No | | The password for that account |
@@ -379,7 +381,7 @@ The project is just getting started. Issues and ideas are welcome.
 
 ## Licence
 
-The viewer map uses [IP to City Lite](https://db-ip.com) by DB-IP, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+The viewer map uses [IP to City Lite](https://db-ip.com) by DB-IP, and VPN detection uses DB-IP's IP to ASN Lite with RouteViews data (via [ip-location-db](https://github.com/sapics/ip-location-db)), both licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 [GNU Affero General Public License v3.0](LICENSE)
 
