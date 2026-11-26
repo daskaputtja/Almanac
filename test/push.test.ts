@@ -92,3 +92,33 @@ describe('push notifications', () => {
     expect(() => push.register('admin-phone', 1, { pushToken: 'https://evil.example' })).toThrow(/Expo push token/);
   });
 });
+
+describe('event feed for the desktop app', () => {
+  it('records alerts once, and shows each account only what it may see', async () => {
+    const db = openDatabase(':memory:');
+    const push = new PushService(db, async () => new Response('{}'), () => {});
+    const admin = { username: 'sam', role: 'admin' as const };
+    const mod = { username: 'morgan', role: 'mod' as const };
+
+    // A new app starts from "now": no backlog.
+    expect(push.eventsFor(admin, null)).toEqual({ events: [], latest: 0 });
+
+    await push.flagEvents([
+      { reason: 'new', userId: '42', username: 'pike', email: null, kind: 'bulk_opening', severity: 'high', headline: 'Opened 244 different titles in a day without watching them', details: [] },
+    ]);
+    await push.suspensionRequested({ id: 7, userId: '42', username: 'pike', action: 'suspend', requestedBy: 'morgan' });
+    await push.suspensionDecided({ userId: '42', username: 'pike', action: 'suspend', requestedBy: 'morgan', status: 'done', reviewedBy: 'sam' });
+    await push.serverAlert({ title: 'Emby 1 is down', body: 'Uptime Kuma says it isn’t answering.', path: '/server' });
+
+    const forAdmin = push.eventsFor(admin, 0);
+    expect(forAdmin.events.map((e) => e.title)).toEqual(['Serious · Possible ripping', 'Suspension request', 'Emby 1 is down']);
+    expect(forAdmin.events[0]).toMatchObject({ kind: 'flag', severity: 'high', body: 'pike: Opened 244 different titles in a day without watching them', path: '/users/42' });
+    expect(forAdmin.events[1]!.path).toBe('/moderation?request=7#request-7');
+
+    // The mod doesn't hear about their own request, but does hear it was approved.
+    expect(push.eventsFor(mod, 0).events.map((e) => e.title)).toEqual(['Serious · Possible ripping', 'Request approved', 'Emby 1 is down']);
+
+    // Asking again from the latest id gives nothing new.
+    expect(push.eventsFor(admin, forAdmin.latest).events).toEqual([]);
+  });
+});

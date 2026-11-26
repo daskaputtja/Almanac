@@ -584,6 +584,12 @@ export function createApp(
     const { user } = c.get('session');
     return { id: user.id, name: user.username, role: user.role };
   };
+  // Recent alerts for the desktop app, which asks every so often instead of receiving pushes.
+  app.get('/api/app/events', (c) => {
+    const { user } = c.get('session');
+    const after = c.req.query('after');
+    return c.json(push.eventsFor({ username: user.username, role: user.role }, after === undefined || after === '' ? null : Number(after) || 0));
+  });
   app.get('/api/suspensions/automatic', requirePermission('requestSuspension'), (c) => c.json(autoRequests.view()));
   app.post('/api/suspensions/automatic', requirePermission('reviewSuspension'), async (c) => c.json(autoRequests.update((await jsonBody(c)).kinds, c.get('session').user.username)));
   app.get('/api/suspensions', requirePermission('requestSuspension'), (c) => {

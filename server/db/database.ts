@@ -384,6 +384,21 @@ const MIGRATIONS: string[] = [
     ALTER TABLE ip_locations ADD COLUMN operator TEXT;
     ALTER TABLE ip_locations ADD COLUMN network_kind TEXT;   -- vpn, isp, lan or unknown; NULL until checked
   `,
+  /* 21: recent alerts, for apps that ask for them (the desktop app) rather than get pushes */ `
+    CREATE TABLE app_events (
+      id          INTEGER PRIMARY KEY,
+      at          TEXT NOT NULL,
+      kind        TEXT NOT NULL,      -- flag, suspension_request, suspension_decided, server
+      permission  TEXT NOT NULL,      -- who may see it
+      only_for    TEXT,               -- just this Almanac username
+      not_for     TEXT,               -- everyone but this username (who caused it)
+      severity    TEXT,               -- for flags
+      title       TEXT NOT NULL,
+      body        TEXT NOT NULL,
+      path        TEXT
+    );
+    CREATE INDEX app_events_at ON app_events (at);
+  `,
 ];
 
 export type Database = DatabaseSync;

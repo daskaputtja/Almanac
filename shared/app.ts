@@ -24,3 +24,22 @@ export interface PushPreferences {
 }
 
 export const DEFAULT_PUSH_PREFERENCES: PushPreferences = { flags: 'medium', suspensions: true, serverAlerts: true, details: true };
+
+/** A recent alert, for apps that ask for them (the desktop app) instead of receiving pushes. */
+export interface AppEvent {
+  id: number;
+  at: string;
+  kind: 'flag' | 'suspension_request' | 'suspension_decided' | 'server';
+  /** For flags: low, medium or high. */
+  severity: string | null;
+  title: string;
+  body: string;
+  /** Where to go in Almanac, e.g. "/users/42". */
+  path: string | null;
+}
+
+export interface AppEventsResponse {
+  events: AppEvent[];
+  /** Pass this back as `after` next time. */
+  latest: number;
+}

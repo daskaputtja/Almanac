@@ -1,6 +1,6 @@
 import { FLAG_GROUP, GROUP_LABELS, type Severity } from '../../shared/moderation.js';
 import { can, type Permission, type Role } from '../../shared/permissions.js';
-import { DEFAULT_PUSH_PREFERENCES, type PushPreferences } from '../../shared/app.js';
+import { type AppEvent, type AppEventsResponse, DEFAULT_PUSH_PREFERENCES, type PushPreferences } from '../../shared/app.js';
 import type { Database } from '../db/database.js';
 import type { FlagEvent } from '../moderation/service.js';
 
@@ -90,10 +90,43 @@ export class PushService {
     await this.deliver([{ device, message: { title: 'Almanac', body: 'Notifications are working.' } }]);
   }
 
+  // --- The event feed (for the desktop app, which asks rather than gets pushed) ---------
+
+  private record(e: { kind: AppEvent['kind']; permission: Permission; onlyFor?: string | null; notFor?: string | null; severity?: string | null } & PushMessage): void {
+    const now = new Date();
+    this.db
+      .prepare('INSERT INTO app_events (at, kind, permission, only_for, not_for, severity, title, body, path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(now.toISOString(), e.kind, e.permission, e.onlyFor ?? null, e.notFor ?? null, e.severity ?? null, e.title, e.body, e.path ?? null);
+    if (Math.random() < 0.05) this.db.prepare('DELETE FROM app_events WHERE at < ?').run(new Date(now.getTime() - 7 * 86_400_000).toISOString());
+  }
+
+  /** Events this account may see, newer than `after`. Without `after`, just where the feed is up to (no backlog). */
+  eventsFor(user: { username: string; role: Role }, after: number | null): AppEventsResponse {
+    const latest = (this.db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM app_events').get() as { id: number }).id;
+    if (after === null) return { events: [], latest };
+    const rows = this.db
+      .prepare('SELECT * FROM app_events WHERE id > ? ORDER BY id LIMIT 100')
+      .all(after) as { id: number; at: string; kind: AppEvent['kind']; permission: Permission; only_for: string | null; not_for: string | null; severity: string | null; title: string; body: string; path: string | null }[];
+    const events = rows
+      .filter((r) => can(user.role, r.permission) && (!r.only_for || r.only_for === user.username) && r.not_for !== user.username)
+      .map((r) => ({ id: r.id, at: r.at, kind: r.kind, severity: r.severity, title: r.title, body: r.body, path: r.path }));
+    return { events, latest: rows.length ? rows[rows.length - 1]!.id : Math.max(after, latest) };
+  }
+
   // --- What gets sent ------------------------------------------------------------
 
   /** New, worse or reopened account flags, to people who can moderate and want that severity. */
   async flagEvents(events: FlagEvent[]): Promise<void> {
+    for (const e of events) {
+      this.record({
+        kind: 'flag',
+        permission: 'moderate',
+        severity: e.severity,
+        title: `${SEVERITY_LABEL[e.severity]} · ${GROUP_LABELS[FLAG_GROUP[e.kind]].title}`,
+        body: `${e.username}: ${e.headline}`,
+        path: `/users/${encodeURIComponent(e.userId)}`,
+      });
+    }
     const out: { device: DeviceRow; message: PushMessage }[] = [];
     for (const device of this.devices('moderate')) {
       const prefs = parsePreferences(device.preferences);
@@ -117,7 +150,15 @@ export class PushService {
   }
 
   /** A mod asked for a suspension: tell the people who can approve it. */
-  async suspensionRequested(request: { userId: string; username: string; action: string; requestedBy: string }): Promise<void> {
+  async suspensionRequested(request: { id?: number; userId: string; username: string; action: string; requestedBy: string }): Promise<void> {
+    this.record({
+      kind: 'suspension_request',
+      permission: 'reviewSuspension',
+      notFor: request.requestedBy,
+      title: 'Suspension request',
+      body: `${request.requestedBy} asks to ${request.action} ${request.username}.`,
+      path: request.id ? `/moderation?request=${request.id}#request-${request.id}` : '/moderation',
+    });
     const out = this.devices('reviewSuspension')
       .filter((d) => parsePreferences(d.preferences).suspensions && d.username !== request.requestedBy)
       .map((device) => ({
@@ -133,6 +174,14 @@ export class PushService {
   async suspensionDecided(request: { userId: string; username: string; action: string; requestedBy: string; status: string; reviewedBy: string | null }): Promise<void> {
     if (!request.reviewedBy || request.reviewedBy === request.requestedBy) return;
     const outcome = request.status === 'done' ? 'approved' : request.status === 'rejected' ? 'rejected' : 'couldn’t be carried out';
+    this.record({
+      kind: 'suspension_decided',
+      permission: 'requestSuspension',
+      onlyFor: request.requestedBy,
+      title: `Request ${outcome}`,
+      body: `Your request to ${request.action} ${request.username} was ${outcome} by ${request.reviewedBy}.`,
+      path: `/users/${encodeURIComponent(request.userId)}`,
+    });
     const out = this.devices('requestSuspension')
       .filter((d) => d.username === request.requestedBy && parsePreferences(d.preferences).suspensions)
       .map((device) => ({
@@ -146,6 +195,7 @@ export class PushService {
 
   /** Server trouble: streams dropping, a server down or back up. */
   async serverAlert(message: PushMessage): Promise<void> {
+    this.record({ kind: 'server', permission: 'moderate', ...message });
     const out = this.devices('moderate')
       .filter((d) => parsePreferences(d.preferences).serverAlerts)
       .map((device) => ({ device, message }));
