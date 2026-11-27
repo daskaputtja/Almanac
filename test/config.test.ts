@@ -53,15 +53,17 @@ describe('artwork paths from Silo', () => {
         { title: 'B', poster_url: null, media: { thumb_url: '/api/v2/artwork/k1' } },
       ],
       next_url_hint: 'not/a/path',
+      other_url: '/api/v2/something/else',
       path: '/api/v2/admin/sessions',
       protocol_url: '//cdn.example.com/x',
     };
     expect(withAbsoluteUrls(reply, 'https://silo.example.com')).toEqual({
       items: [
-        { title: 'A', poster_url: 'https://silo.example.com/api/v2/item-posters/42?exp=1&sig=abc', backdrop_url: 'https://cdn.example.com/b.jpg' },
-        { title: 'B', poster_url: null, media: { thumb_url: 'https://silo.example.com/api/v2/artwork/k1' } },
+        { title: 'A', poster_url: '/api/artwork/item-posters/42?exp=1&sig=abc', backdrop_url: 'https://cdn.example.com/b.jpg' },
+        { title: 'B', poster_url: null, media: { thumb_url: '/api/artwork/artwork/k1' } },
       ],
       next_url_hint: 'not/a/path',
+      other_url: 'https://silo.example.com/api/v2/something/else',
       path: '/api/v2/admin/sessions', // not a *_url field
       protocol_url: '//cdn.example.com/x',
     });

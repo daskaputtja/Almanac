@@ -109,14 +109,14 @@ describe('FailureLimiter', () => {
 
 const PASSWORD = 'a very good passphrase';
 
-function makeApp() {
+function makeApp(siloUrl?: string) {
   const db = openDatabase(':memory:');
   const auth = new AuthService(db);
   const history = new HistoryStore(db);
   const catalogSync = new CatalogSync(db, new MockCatalogSource(), { intervalMs: 60_000, log: () => {} });
   const monitor = new ActivityMonitor(new MockSessionSource(), 60_000, () => {});
   const app = createApp(
-    { webRoot: 'dist/web', trustProxy: false, secureCookies: 'auto' },
+    { webRoot: 'dist/web', trustProxy: false, secureCookies: 'auto', siloUrl },
     {
       auth,
       monitor,
@@ -790,5 +790,43 @@ describe('portal API', () => {
     });
     expect(sent[0]!.headers['X-Almanac-Signature']).toMatch(/^sha256=[0-9a-f]{64}$/);
     expect(() => portalApi.setFlagLevel('loud', 'admin')).toThrow(/Unknown/);
+  });
+});
+
+describe('artwork passed on from Silo', () => {
+  it('serves Silo’s posters from Almanac’s own address, and nothing else', async () => {
+    const { createServer } = await import('node:http');
+    const seen: string[] = [];
+    const silo = createServer((req, res) => {
+      seen.push(req.url!);
+      if (req.url!.startsWith('/api/v2/item-posters/42')) {
+        res.writeHead(200, { 'Content-Type': 'image/webp', ETag: '"p42"' });
+        res.end(Buffer.from([1, 2, 3]));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"secret":"no"}');
+      }
+    });
+    await new Promise<void>((r) => silo.listen(0, '127.0.0.1', () => r()));
+    const port = (silo.address() as { port: number }).port;
+    try {
+      const { app } = makeApp(`http://127.0.0.1:${port}`);
+      // No sign-in needed: these are public, signed links in Silo too.
+      const res = await app.request('http://almanac.test/api/artwork/item-posters/42?exp=1&sig=abc');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/webp');
+      expect(res.headers.get('etag')).toBe('"p42"');
+      expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
+      expect(seen).toEqual(['/api/v2/item-posters/42?exp=1&sig=abc']);
+
+      // Only images, and only Silo's artwork paths: it can't be used to reach anything else.
+      expect((await app.request('http://almanac.test/api/artwork/item-posters/99')).status).toBe(502);
+      expect((await app.request('http://almanac.test/api/artwork/admin/users')).status).toBe(404);
+      expect((await app.request('http://almanac.test/api/artwork/artwork/..%2F..%2Fadmin')).status).toBe(404);
+      expect((await app.request('http://almanac.test/api/artwork/item-posters/../admin/users')).status).toBe(404);
+      expect(seen).toHaveLength(2);
+    } finally {
+      silo.close();
+    }
   });
 });

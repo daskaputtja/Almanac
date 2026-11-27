@@ -33,6 +33,7 @@ import { ModerationService } from './moderation/service.js';
 import { CapacityService } from './capacity/capacity.js';
 import { PlaybackHealth } from './health/health.js';
 import { PortalApi } from './portal/portal.js';
+import { setArtworkBases } from './notify/discord.js';
 import { AutoRequests } from './suspensions/auto.js';
 
 let config;
@@ -56,10 +57,18 @@ try {
   process.exit(1);
 }
 
-// Silo now gives artwork as paths on its own server; fix any already stored
-// (the 12-hourly catalog re-read refreshes them properly).
+// Silo gives artwork as paths on its own server, which Almanac now passes on from its
+// own address (/api/artwork/…). Move posters stored before then over to that.
 if (silo) {
-  db.prepare("UPDATE catalog_items SET poster_url = ? || poster_url WHERE poster_url LIKE '/%' AND poster_url NOT LIKE '//%'").run(config.siloUrl.replace(/\/+$/, ''));
+  const siloBase = config.siloUrl.replace(/\/+$/, '');
+  db.prepare(
+    `UPDATE catalog_items SET poster_url = '/api/artwork/' || substr(poster_url, length(?) + 1)
+     WHERE poster_url LIKE ? || '%' AND (poster_url LIKE '%/api/v2/item-posters/%' OR poster_url LIKE '%/api/v2/artwork/%')`,
+  ).run(`${siloBase}/api/v2/`, `${siloBase}/api/v2/`);
+  db.prepare(
+    `UPDATE catalog_items SET poster_url = '/api/artwork/' || substr(poster_url, length('/api/v2/') + 1)
+     WHERE poster_url LIKE '/api/v2/item-posters/%' OR poster_url LIKE '/api/v2/artwork/%'`,
+  ).run();
 }
 
 const history = new HistoryStore(db);
@@ -146,6 +155,8 @@ accounts.start();
 
 // How reliably streams play, with an optional alert to a staff Discord channel.
 const staff = new StaffAlerts(db);
+// Discord needs full addresses for posters: Almanac's own (learned from the staff settings), else Silo's.
+setArtworkBases({ almanac: () => staff.baseUrl(), silo: silo ? config.siloUrl : null });
 const reliability = new ReliabilityService(db, serverSource, staff);
 // Will evening peaks outgrow the server? From the load history, against limits set in Server → Capacity.
 const capacity = new CapacityService(db, staff);

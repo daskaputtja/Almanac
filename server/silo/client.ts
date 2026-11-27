@@ -291,18 +291,32 @@ export class SiloClient implements SessionSource, HistorySource, CatalogSource, 
   }
 }
 
+/** Silo's artwork paths, which Almanac passes on from its own address (see /api/artwork). */
+export const SILO_ARTWORK = /^\/api\/v2\/(item-posters|artwork)\//;
+
+/** "/api/v2/item-posters/1?exp=…" → "/api/artwork/item-posters/1?exp=…", served by Almanac itself. */
+export function artworkPath(siloPath: string): string {
+  return `/api/artwork/${siloPath.slice('/api/v2/'.length)}`;
+}
+
 /**
  * Silo gives artwork (poster_url and other *_url fields) as paths on its own
- * server, like /api/v2/item-posters/123?exp=…&sig=…. They're public, signed
- * links, but a browser showing Almanac would ask Almanac for them, so put
- * Silo's address in front. Full addresses are left alone.
+ * server, like /api/v2/item-posters/123?exp=…&sig=…. Those become Almanac's own
+ * /api/artwork/… addresses, so the browser never has to reach Silo itself (its
+ * SILO_URL may be an internal address, or plain http). Other paths get Silo's
+ * address in front. Full addresses are left alone.
  */
 export function withAbsoluteUrls(value: unknown, baseUrl: string): unknown {
   if (Array.isArray(value)) return value.map((v) => withAbsoluteUrls(v, baseUrl));
   if (!value || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [key, v] of Object.entries(value)) {
-    out[key] = key.endsWith('_url') && typeof v === 'string' && v.startsWith('/') && !v.startsWith('//') ? `${baseUrl}${v}` : withAbsoluteUrls(v, baseUrl);
+    out[key] =
+      key.endsWith('_url') && typeof v === 'string' && v.startsWith('/') && !v.startsWith('//')
+        ? SILO_ARTWORK.test(v)
+          ? artworkPath(v)
+          : `${baseUrl}${v}`
+        : withAbsoluteUrls(v, baseUrl);
   }
   return out;
 }

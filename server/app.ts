@@ -187,6 +187,31 @@ export function createApp(
     return c.json(info);
   });
 
+  // Silo's artwork, passed on from Almanac's own address, so browsers (and Discord) never
+  // need to reach Silo directly. Only Silo's poster and artwork paths: these are public,
+  // signed links in Silo too, so no sign-in is needed (shared recaps show posters).
+  app.get('/api/artwork/*', async (c) => {
+    const rest = c.req.path.slice('/api/artwork/'.length);
+    if (!config.siloUrl || !/^(item-posters|artwork)\/[A-Za-z0-9._~%/-]+$/.test(rest) || rest.includes('..')) return c.json({ error: 'Not found' }, 404);
+    const query = new URL(c.req.url).search;
+    let res: Response;
+    try {
+      res = await fetch(`${config.siloUrl.replace(/\/+$/, '')}/api/v2/${rest}${query}`, {
+        headers: { Accept: 'image/*', 'User-Agent': 'Almanac', ...(c.req.header('if-none-match') ? { 'If-None-Match': c.req.header('if-none-match')! } : {}) },
+        signal: AbortSignal.timeout(20_000),
+      });
+    } catch {
+      return c.body(null, 502);
+    }
+    if (res.status === 304) return c.body(null, 304);
+    const type = res.headers.get('content-type') ?? '';
+    if (!res.ok || !/^image\//i.test(type)) return c.body(null, res.ok ? 502 : res.status === 404 ? 404 : 502);
+    const headers: Record<string, string> = { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' };
+    const etag = res.headers.get('etag');
+    if (etag) headers.ETag = etag;
+    return new Response(res.body, { status: 200, headers });
+  });
+
   // A shared recap link works without signing in, and shows only that recap.
   app.get('/api/public/recap/:token', (c) => {
     c.header('Cache-Control', 'no-store');

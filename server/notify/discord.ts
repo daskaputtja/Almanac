@@ -325,7 +325,17 @@ function linkLine(links: ([string, string] | null)[]): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 
+/** Where Discord can fetch artwork Almanac passes on (/api/artwork/…): Almanac's public address, else Silo's. */
+let artworkBases: { almanac: () => string | null; silo: string | null } = { almanac: () => null, silo: null };
+export function setArtworkBases(bases: typeof artworkBases): void {
+  artworkBases = bases;
+}
+
 function poster(url?: string | null): DiscordEmbed['thumbnail'] {
+  if (url?.startsWith('/api/artwork/')) {
+    const almanac = artworkBases.almanac();
+    url = almanac ? `${almanac}${url}` : artworkBases.silo ? `${artworkBases.silo.replace(/\/+$/, '')}/api/v2/${url.slice('/api/artwork/'.length)}` : null;
+  }
   return url && /^https:\/\//.test(url) ? { url } : undefined;
 }
 
