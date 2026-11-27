@@ -34,6 +34,7 @@ import { CapacityService } from './capacity/capacity.js';
 import { PlaybackHealth } from './health/health.js';
 import { PortalApi } from './portal/portal.js';
 import { setArtworkBases } from './notify/discord.js';
+import { ArtworkService } from './library/artwork.js';
 import { AutoRequests } from './suspensions/auto.js';
 
 let config;
@@ -89,6 +90,8 @@ monitor.start();
 const catalogSync = new CatalogSync(db, catalogSource, { intervalMs: config.catalogSyncIntervalMs });
 catalogSync.start();
 
+// Silo's posters, passed on from Almanac's own address, with a copy kept of each.
+const artwork = new ArtworkService(db, dirname(config.databasePath), silo ? config.siloUrl : null, silo);
 const stats = new StatsService(db);
 const users = new UsersService(db);
 const library = new LibraryService(db, catalogSync);
@@ -201,7 +204,7 @@ moderation.onFlagEvents((events) => {
 reliability.start();
 capacity.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, staff, suspensions, board, statusBoard, push });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, staff, suspensions, board, statusBoard, push });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

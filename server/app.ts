@@ -31,6 +31,7 @@ import { CapacityError, type CapacityService } from './capacity/capacity.js';
 import type { PlaybackHealth } from './health/health.js';
 import { PortalApiError, type PortalApi } from './portal/portal.js';
 import type { AutoRequests } from './suspensions/auto.js';
+import type { ArtworkService } from './library/artwork.js';
 import { FailureLimiter } from './auth/rateLimit.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
@@ -73,6 +74,7 @@ export interface AppServices {
   health: PlaybackHealth;
   portalApi: PortalApi;
   autoRequests: AutoRequests;
+  artwork: ArtworkService;
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
@@ -144,7 +146,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, staff, suspensions, board, statusBoard, push }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -191,25 +193,16 @@ export function createApp(
   // need to reach Silo directly. Only Silo's poster and artwork paths: these are public,
   // signed links in Silo too, so no sign-in is needed (shared recaps show posters).
   app.get('/api/artwork/*', async (c) => {
-    const rest = c.req.path.slice('/api/artwork/'.length);
-    if (!config.siloUrl || !/^(item-posters|artwork)\/[A-Za-z0-9._~%/-]+$/.test(rest) || rest.includes('..')) return c.json({ error: 'Not found' }, 404);
-    const query = new URL(c.req.url).search;
-    let res: Response;
-    try {
-      res = await fetch(`${config.siloUrl.replace(/\/+$/, '')}/api/v2/${rest}${query}`, {
-        headers: { Accept: 'image/*', 'User-Agent': 'Almanac', ...(c.req.header('if-none-match') ? { 'If-None-Match': c.req.header('if-none-match')! } : {}) },
-        signal: AbortSignal.timeout(20_000),
-      });
-    } catch {
-      return c.body(null, 502);
+    const result = await artwork.get(c.req.path.slice('/api/artwork/'.length), new URL(c.req.url).search, c.req.header('if-none-match'));
+    if (result.status === 304) return c.body(null, 304, { ETag: result.etag! });
+    if (result.status !== 200) {
+      if (result.retryAfter) c.header('Retry-After', String(result.retryAfter));
+      return c.body(null, result.status);
     }
-    if (res.status === 304) return c.body(null, 304);
-    const type = res.headers.get('content-type') ?? '';
-    if (!res.ok || !/^image\//i.test(type)) return c.body(null, res.ok ? 502 : res.status === 404 ? 404 : 502);
-    const headers: Record<string, string> = { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff' };
-    const etag = res.headers.get('etag');
-    if (etag) headers.ETag = etag;
-    return new Response(res.body, { status: 200, headers });
+    return new Response(new Uint8Array(result.body!), {
+      status: 200,
+      headers: { 'Content-Type': result.type!, 'Cache-Control': 'public, max-age=86400', 'X-Content-Type-Options': 'nosniff', ...(result.etag ? { ETag: result.etag } : {}) },
+    });
   });
 
   // A shared recap link works without signing in, and shows only that recap.

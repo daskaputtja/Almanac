@@ -41,6 +41,8 @@ import { CapacityService } from '../server/capacity/capacity.js';
 import { PlaybackHealth } from '../server/health/health.js';
 import { PortalApi } from '../server/portal/portal.js';
 import { AutoRequests } from '../server/suspensions/auto.js';
+import { ArtworkService } from '../server/library/artwork.js';
+import { mkdtempSync } from 'node:fs';
 
 describe('TOTP', () => {
   // RFC 6238 appendix B test vectors (SHA-1, 8 digits).
@@ -139,6 +141,7 @@ function makeApp(siloUrl?: string) {
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       capacity: new CapacityService(db, null, () => {}),
       health: new PlaybackHealth(db),
+      artwork: new ArtworkService(db, mkdtempSync(`${tmpdir()}/almanac-art-`), siloUrl ?? null, new MockCatalogSource(), fetch, () => {}),
       autoRequests: new AutoRequests(db, new SuspensionService(db, { note: () => {} }, failingFetch), () => {}),
       portalApi: new PortalApi(db, { users: new UsersService(db), moderation: new ModerationService(db), health: new PlaybackHealth(db), monitor, suspensions: new SuspensionService(db, { note: () => {} }, failingFetch), baseUrl: () => null }, () => {}),
       staff: new StaffAlerts(db, failingFetch, () => {}),
@@ -815,7 +818,7 @@ describe('artwork passed on from Silo', () => {
       const res = await app.request('http://almanac.test/api/artwork/item-posters/42?exp=1&sig=abc');
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('image/webp');
-      expect(res.headers.get('etag')).toBe('"p42"');
+      expect(res.headers.get('etag')).toMatch(/^"a-[0-9a-f]{16}"$/);
       expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([1, 2, 3]);
       expect(seen).toEqual(['/api/v2/item-posters/42?exp=1&sig=abc']);
 
