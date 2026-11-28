@@ -176,40 +176,59 @@ function TelegramTargetRow({
   act: (fn: () => Promise<TelegramSettings>, done?: string) => Promise<void>;
 }) {
   const t = settings.targets[board];
+  const [chat, setChat] = useState(t.chatId ?? '');
   const [topic, setTopic] = useState(t.threadId ? String(t.threadId) : '');
   const save = (chatId: string | null, topicValue: string) =>
     act(() => api<TelegramSettings>('/api/notifications/telegram/target', { method: 'POST', body: { board, chatId, topic: topicValue.trim() || null } }), chatId ? 'Posted.' : 'Saved.');
+  // A pasted topic link says which group it's in: choose that group too.
+  const onTopic = (value: string) => {
+    setTopic(value);
+    const id = value.match(/t\.me\/c\/(\d+)\//)?.[1];
+    const match = id ? settings.chats.find((c) => c.id === `-100${id}`) : undefined;
+    if (match) setChat(match.id);
+  };
+  const unchanged = chat === (t.chatId ?? '') && topic.trim() === (t.threadId ? String(t.threadId) : '');
   return (
     <div className="space-y-2 text-sm">
-      <label className="block">
+      <div>
         <span className="font-medium">{label}</span>
         <span className="block text-xs text-ink-faint">{detail}</span>
-        <select value={t.chatId ?? ''} disabled={busy} onChange={(e) => void save(e.target.value || null, topic)} className={`${input} mt-1 w-full`}>
-          <option value="">Not on Telegram</option>
-          {settings.chats.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title} ({c.type === 'channel' ? 'channel' : 'group'})
-            </option>
-          ))}
-        </select>
-      </label>
-      {t.chatId && (
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void save(t.chatId, topic);
-          }}
-        >
-          <label className="min-w-0 flex-1 basis-64">
-            <span className="text-xs text-ink-muted">Topic (for a group with topics; leave empty for the main chat)</span>
-            <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="https://t.me/c/1234567890/33288" className={`${input} mt-1 w-full`} />
-          </label>
-          <button type="submit" disabled={busy} className={secondary}>
-            {t.threadId ? 'Change topic' : 'Use this topic'}
-          </button>
-        </form>
-      )}
+      </div>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save(chat || null, chat ? topic : '');
+        }}
+      >
+        <label className="min-w-0 flex-1 basis-48">
+          <span className="text-xs text-ink-muted">Group or channel</span>
+          <select
+            value={chat}
+            disabled={busy}
+            onChange={(e) => {
+              setChat(e.target.value);
+              // Turning it off happens straight away; choosing a group waits for the button.
+              if (!e.target.value && t.chatId) void save(null, '');
+            }}
+            className={`${input} mt-1 w-full`}
+          >
+            <option value="">Not on Telegram</option>
+            {settings.chats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title} ({c.type === 'channel' ? 'channel' : 'group'})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-0 flex-1 basis-64">
+          <span className="text-xs text-ink-muted">Topic link (optional; empty posts in the main chat)</span>
+          <input value={topic} onChange={(e) => onTopic(e.target.value)} placeholder="https://t.me/c/1234567890/33288" className={`${input} mt-1 w-full`} />
+        </label>
+        <button type="submit" disabled={busy || !chat || (unchanged && Boolean(t.chatId))} className={secondary}>
+          {t.chatId ? 'Save and post' : 'Post here'}
+        </button>
+      </form>
       {t.lastError ? (
         <p className="text-xs text-red-200">{t.lastError}</p>
       ) : t.lastUpdatedAt ? (
