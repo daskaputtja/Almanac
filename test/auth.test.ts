@@ -42,6 +42,7 @@ import { PlaybackHealth } from '../server/health/health.js';
 import { PortalApi } from '../server/portal/portal.js';
 import { AutoRequests } from '../server/suspensions/auto.js';
 import { ArtworkService } from '../server/library/artwork.js';
+import { TelegramService } from '../server/notify/telegram.js';
 import { mkdtempSync } from 'node:fs';
 
 describe('TOTP', () => {
@@ -141,6 +142,7 @@ function makeApp(siloUrl?: string) {
       reliability: new ReliabilityService(db, new MockServerSource(), null, () => {}),
       capacity: new CapacityService(db, null, () => {}),
       health: new PlaybackHealth(db),
+      telegram: new TelegramService(db, failingFetch, () => {}),
       artwork: new ArtworkService(db, mkdtempSync(`${tmpdir()}/almanac-art-`), siloUrl ?? null, new MockCatalogSource(), fetch, () => {}),
       autoRequests: new AutoRequests(db, new SuspensionService(db, { note: () => {} }, failingFetch), () => {}),
       portalApi: new PortalApi(db, { users: new UsersService(db), moderation: new ModerationService(db), health: new PlaybackHealth(db), monitor, suspensions: new SuspensionService(db, { note: () => {} }, failingFetch), baseUrl: () => null }, () => {}),

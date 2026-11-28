@@ -4,6 +4,7 @@ import { SettingsStore } from '../db/settings.js';
 import type { LibraryService } from '../library/library.js';
 import { DiscordError, type DiscordEmbed, upsertWebhookMessage } from './discord.js';
 import { NotifyError, webhookHint } from './notifier.js';
+import type { TelegramService } from './telegram.js';
 
 const KEY = 'libraryBoard';
 const UPDATE_EVERY_MS = 60 * 60_000;
@@ -27,6 +28,8 @@ type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 export class LibraryBoard {
   private readonly settings: SettingsStore;
   private timer: NodeJS.Timeout | null = null;
+  /** Also post the board to a Telegram group, if one is chosen. */
+  telegram: TelegramService | null = null;
 
   constructor(
     private readonly db: Database,
@@ -89,10 +92,14 @@ export class LibraryBoard {
   /** Post or edit the message now. */
   async update(): Promise<void> {
     const s = this.stored();
-    if (!s.webhookUrl) return;
+    const toTelegram = Boolean(this.telegram?.wants('library'));
+    if (!s.webhookUrl && !toTelegram) return;
     if (!this.library.libraries().status.ready) return; // counts would be partial
+    const embeds = this.embeds(s.hiddenLibraryIds);
+    if (toTelegram) await this.telegram!.publish('library', embeds);
+    if (!s.webhookUrl) return;
     try {
-      const messageId = await upsertWebhookMessage(s.webhookUrl, s.messageId, this.embeds(s.hiddenLibraryIds), this.fetchImpl);
+      const messageId = await upsertWebhookMessage(s.webhookUrl, s.messageId, embeds, this.fetchImpl);
       this.save({ ...this.stored(), messageId, lastUpdatedAt: new Date().toISOString(), lastError: null }, null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

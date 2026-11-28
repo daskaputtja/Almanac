@@ -32,6 +32,7 @@ import type { PlaybackHealth } from './health/health.js';
 import { PortalApiError, type PortalApi } from './portal/portal.js';
 import type { AutoRequests } from './suspensions/auto.js';
 import type { ArtworkService } from './library/artwork.js';
+import type { TelegramService } from './notify/telegram.js';
 import { FailureLimiter } from './auth/rateLimit.js';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';
@@ -75,6 +76,7 @@ export interface AppServices {
   portalApi: PortalApi;
   autoRequests: AutoRequests;
   artwork: ArtworkService;
+  telegram: TelegramService;
   staff: StaffAlerts;
   suspensions: SuspensionService;
   board: LibraryBoard;
@@ -146,7 +148,7 @@ function userWithoutIps(user: UserDetail): UserDetail {
 
 export function createApp(
   config: Pick<Config, 'webRoot' | 'trustProxy' | 'secureCookies'> & { siloUrl?: string },
-  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, staff, suspensions, board, statusBoard, push }: AppServices,
+  { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending, shares, geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, telegram, staff, suspensions, board, statusBoard, push }: AppServices,
 ) {
   const app = new Hono<AuthEnv>();
 
@@ -541,6 +543,20 @@ export function createApp(
   app.post('/api/notifications/board/refresh', notifications, async (c) => {
     await board.update();
     return c.json(board.view());
+  });
+  app.get('/api/notifications/telegram', notifications, (c) => c.json(telegram.view()));
+  app.post('/api/notifications/telegram', notifications, async (c) => {
+    const body = await jsonBody(c);
+    const token = body.token === null ? null : typeof body.token === 'string' ? body.token : undefined;
+    if (token === undefined) return c.json({ error: 'Send the bot token.' }, 400);
+    return c.json(await telegram.setToken(token, c.get('session').user.username));
+  });
+  app.post('/api/notifications/telegram/chats', notifications, async (c) => c.json(await telegram.findChats()));
+  app.post('/api/notifications/telegram/target', notifications, async (c) => {
+    const body = await jsonBody(c);
+    if (body.board !== 'library' && body.board !== 'status') return c.json({ error: 'Choose a board.' }, 400);
+    const chatId = typeof body.chatId === 'string' && body.chatId ? body.chatId : null;
+    return c.json(await telegram.setTarget(body.board, chatId, c.get('session').user.username));
   });
   app.post('/api/notifications/staff', notifications, async (c) => {
     const body = await jsonBody(c);

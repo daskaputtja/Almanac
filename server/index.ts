@@ -35,6 +35,7 @@ import { PlaybackHealth } from './health/health.js';
 import { PortalApi } from './portal/portal.js';
 import { setArtworkBases } from './notify/discord.js';
 import { ArtworkService } from './library/artwork.js';
+import { TelegramService } from './notify/telegram.js';
 import { AutoRequests } from './suspensions/auto.js';
 
 let config;
@@ -171,6 +172,11 @@ board.start();
 // Server status from an Uptime Kuma status page, as a Discord message.
 const statusBoard = new StatusBoard(db);
 statusBoard.start();
+// The same boards in a Telegram group, through a bot from @BotFather.
+const telegram = new TelegramService(db);
+board.telegram = telegram;
+statusBoard.telegram = telegram;
+telegram.onTargetChanged = (which) => (which === 'library' ? board.update() : statusBoard.update(true));
 
 // Push notifications to the phone app, through Expo.
 const push = new PushService(db, fetch, console.log, process.env.EXPO_ACCESS_TOKEN?.trim() || null);
@@ -204,7 +210,7 @@ moderation.onFlagEvents((events) => {
 reliability.start();
 capacity.start();
 
-const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, staff, suspensions, board, statusBoard, push });
+const app = createApp(config, { auth, monitor, history, historySync, stats, users, library, moderation, overview, recap, load, transcodes, trending: new TrendingService(db), shares: new RecapShares(db, recap), geo, notifier, metadata, accounts, reliability, capacity, health, portalApi, autoRequests, artwork, telegram, staff, suspensions, board, statusBoard, push });
 const server = serve({ fetch: app.fetch, port: config.port, hostname: config.host }, (info) => {
   console.log(`Almanac is running on http://localhost:${info.port}`);
   console.log(config.mock ? 'Using mock Silo data.' : `Watching Silo at ${config.siloUrl}`);

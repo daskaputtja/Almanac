@@ -9,6 +9,7 @@ import {
   type QualityFilter,
 } from '../../../shared/notifications';
 import { FLAG_ALERT_LEVELS } from '../../../shared/reliability';
+import type { TelegramBoard, TelegramSettings } from '../../../shared/notifications';
 import { ApiError, api } from '../lib/api';
 import { formatFullDate, formatWhen } from '../lib/format';
 
@@ -56,12 +57,130 @@ export function NotificationsPage() {
           <ChannelsCard channels={data.channels} libraries={data.libraries} onChange={load} />
           {data.board && <BoardCard board={data.board} libraries={data.libraries} onChange={load} />}
           {data.status && <StatusCard status={data.status} onChange={load} />}
+          <TelegramCard />
           <KeysCard keys={data.keys} onChange={load} />
           {data.staff && <StaffCard staff={data.staff} onChange={load} />}
           <LogCard log={data.log} />
         </>
       )}
     </div>
+  );
+}
+
+// --- Telegram --------------------------------------------------------------------
+
+const TELEGRAM_BOARDS: { board: TelegramBoard; label: string; detail: string }[] = [
+  { board: 'library', label: 'Library counts', detail: 'Every library and how much is in it, edited every hour.' },
+  { board: 'status', label: 'Server status', detail: 'Your Uptime Kuma servers with a coloured dot each, edited every 2 minutes.' },
+];
+
+function TelegramCard() {
+  const [settings, setSettings] = useState<TelegramSettings | null>(null);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    api<TelegramSettings>('/api/notifications/telegram').then(setSettings).catch(() => {});
+  }, []);
+
+  const act = async (fn: () => Promise<TelegramSettings>, done?: string) => {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setSettings(await fn());
+      if (done) setMessage({ ok: true, text: done });
+    } catch (err) {
+      setMessage({ ok: false, text: err instanceof ApiError ? err.message : 'Something went wrong.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return null;
+  return (
+    <section className="rounded-xl border border-line bg-panel p-5">
+      <h2 className="font-semibold">Telegram</h2>
+      <p className="mt-1 text-sm text-ink-muted">
+        Post the library counts and server status to a Telegram group or channel too, as one message each, edited in place like the Discord ones.
+      </p>
+      {!settings.tokenSet ? (
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void act(() => api<TelegramSettings>('/api/notifications/telegram', { method: 'POST', body: { token } }), 'Connected.').then(() => setToken(''));
+          }}
+        >
+          <ol className="list-decimal space-y-1 pl-5 text-sm text-ink-muted">
+            <li>
+              In Telegram, message <strong className="font-medium text-ink">@BotFather</strong>, send <code>/newbot</code> and give it a name. It gives you a token.
+            </li>
+            <li>Add the bot to your group (for a channel, make it an admin so it can post), and send any message there so the bot sees the group.</li>
+            <li>Paste the token here. Almanac never shows it again.</li>
+          </ol>
+          <label className="block text-sm">
+            <span className="font-medium">Bot token</span>
+            <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" placeholder="123456789:AAH…" className={`${input} mt-1 w-full font-mono`} />
+          </label>
+          <button type="submit" disabled={busy || !token.trim()} className={primary}>
+            Connect
+          </button>
+        </form>
+      ) : (
+        <div className="mt-4 space-y-4">
+          <p className="text-sm">
+            Connected as <strong className="font-medium">@{settings.botUsername}</strong>.{' '}
+            {settings.chats.length
+              ? `It’s in ${settings.chats.length} ${settings.chats.length === 1 ? 'group or channel' : 'groups and channels'}.`
+              : 'It hasn’t seen any groups yet: add it to one, send a message there, then look again.'}
+          </p>
+          {TELEGRAM_BOARDS.map(({ board, label, detail }) => {
+            const t = settings.targets[board];
+            return (
+              <label key={board} className="block text-sm">
+                <span className="font-medium">{label}</span>
+                <span className="block text-xs text-ink-faint">{detail}</span>
+                <select
+                  value={t.chatId ?? ''}
+                  disabled={busy}
+                  onChange={(e) => void act(() => api<TelegramSettings>('/api/notifications/telegram/target', { method: 'POST', body: { board, chatId: e.target.value || null } }), e.target.value ? 'Posted.' : 'Saved.')}
+                  className={`${input} mt-1 w-full`}
+                >
+                  <option value="">Not on Telegram</option>
+                  {settings.chats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title} ({c.type === 'channel' ? 'channel' : 'group'})
+                    </option>
+                  ))}
+                </select>
+                {t.lastError ? (
+                  <span className="mt-1 block text-xs text-red-200">{t.lastError}</span>
+                ) : t.lastUpdatedAt ? (
+                  <span className="mt-1 block text-xs text-ink-faint">Last updated {formatWhen(t.lastUpdatedAt)}</span>
+                ) : null}
+              </label>
+            );
+          })}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api<TelegramSettings>('/api/notifications/telegram/chats', { method: 'POST' }))}>
+              Look for groups again
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className={secondary}
+              onClick={() => {
+                if (window.confirm('Disconnect the Telegram bot? The boards stop updating there.')) void act(() => api<TelegramSettings>('/api/notifications/telegram', { method: 'POST', body: { token: null } }));
+              }}
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
+      {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
+    </section>
   );
 }
 

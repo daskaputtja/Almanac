@@ -3,6 +3,7 @@ import type { Database } from '../db/database.js';
 import { SettingsStore } from '../db/settings.js';
 import { type DiscordEmbed, upsertWebhookMessage } from './discord.js';
 import { NotifyError, webhookHint } from './notifier.js';
+import type { TelegramService } from './telegram.js';
 
 const KEY = 'statusBoard';
 const CHECK_EVERY_MS = 2 * 60_000;
@@ -34,6 +35,8 @@ export class StatusBoard {
   private timer: NodeJS.Timeout | null = null;
   /** Called with servers that just went down or came back up. */
   onChange: ((changes: StatusBoardMonitor[]) => void) | null = null;
+  /** Also post the status to a Telegram group, if one is chosen. */
+  telegram: TelegramService | null = null;
 
   constructor(
     db: Database,
@@ -123,6 +126,7 @@ export class StatusBoard {
         if (changes.length) this.onChange(changes);
       }
       let messageId = s.messageId;
+      if (this.telegram?.wants('status')) await this.telegram.publish('status', [statusEmbed(monitors)]);
       if (s.webhookUrl) messageId = await upsertWebhookMessage(s.webhookUrl, s.messageId, [statusEmbed(monitors)], this.fetchImpl);
       this.settings.set(KEY, { ...this.stored(), monitors, messageId, lastUpdatedAt: new Date().toISOString(), lastError: null }, null);
     } catch (err) {

@@ -96,3 +96,28 @@ export interface LibraryBoardSettings {
 /** Discord's webhook addresses, optionally posting into a thread or forum post. */
 export const DISCORD_WEBHOOK_PATTERN =
   /^https:\/\/(?:(?:ptb|canary)\.)?(?:discord|discordapp)\.com\/api(?:\/v\d{1,2})?\/webhooks\/(\d{5,25})\/([\w-]{20,120})\/?(?:\?thread_id=\d{5,25})?$/;
+
+/** Boards that can also go to Telegram. */
+export type TelegramBoard = 'library' | 'status';
+
+export interface TelegramChat {
+  id: string;
+  title: string;
+  type: 'group' | 'supergroup' | 'channel';
+}
+
+export interface TelegramTargetView {
+  chatId: string | null;
+  chatTitle: string | null;
+  lastUpdatedAt: string | null;
+  lastError: string | null;
+}
+
+/** Telegram, through a bot from @BotFather. The token is never sent back. */
+export interface TelegramSettings {
+  tokenSet: boolean;
+  botUsername: string | null;
+  /** Groups and channels the bot has been added to. */
+  chats: TelegramChat[];
+  targets: Record<TelegramBoard, TelegramTargetView>;
+}

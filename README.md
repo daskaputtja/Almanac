@@ -110,6 +110,7 @@ Networks are compared rather than exact IP addresses (IPv4 /24, IPv6 /64, and al
 - **Server status:** one message showing each server on an Uptime Kuma status page with a coloured dot and its uptime today (🟢 Emby 1: 100% today), or how long it has been down, edited every 2 minutes. Works behind Cloudflare Access with a service token
 - **Library counts:** one message in a channel of your choice listing every library and how much is in it (with new films and episodes this week), edited every hour so the channel never fills up. Choose which libraries to show
 
+- **Telegram:** the library counts and server status can also go to a Telegram group or channel, as one message each edited in place. Make a bot with @BotFather, add it to the group, paste its token in Notifications → Telegram and pick the group for each board
 - **Buttons on staff posts:** suspension requests come with *Review in Almanac* (opens that request, ready to approve or reject) and *Case file*; flags come with *Open in Almanac* and *Case file*
 
 ### Later
