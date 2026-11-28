@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { openDatabase } from '../server/db/database.js';
-import { embedsToTelegramHtml, TelegramService } from '../server/notify/telegram.js';
+import { embedsToTelegramHtml, parseTopicLink, TelegramService } from '../server/notify/telegram.js';
 
 const TOKEN = '123456789:AAHfakefakefakefakefakefakefakefake1';
 
@@ -102,5 +102,26 @@ describe('Telegram', () => {
     ).toBe(
       '<b>🎬 Movies: 96,367 movies</b>\n\n12 libraries\n\n<b>Movies - 4K</b>: 6,895 · +26 this week\n<b>Tom \\&amp; Jerry &lt;3</b>: 5\n<a href="https://almanac.example/x">Open</a>\n\n<b>📺 TV</b>\n\n<b>Most drops</b>\nFire TV: 3\n\n<i>Updated every hour by Almanac</i>',
     );
+  });
+});
+
+describe('Telegram topics', () => {
+  it('reads topic links', () => {
+    expect(parseTopicLink('https://t.me/c/1234567890/33288')).toEqual({ chatId: '-1001234567890', threadId: 33288 });
+    expect(parseTopicLink('t.me/c/1234567890/33288/40001')).toEqual({ chatId: '-1001234567890', threadId: 33288 });
+    expect(parseTopicLink('33288')).toEqual({ chatId: null, threadId: 33288 });
+    expect(parseTopicLink('https://t.me/somegroup')).toBeNull();
+  });
+
+  it('posts into the chosen topic, and explains a closed one', async () => {
+    const t = fakeTelegram();
+    const tg = new TelegramService(openDatabase(':memory:'), t.fetchImpl as typeof fetch, () => {});
+    await tg.setToken(TOKEN, 'admin');
+    await expect(tg.setTarget('status', '-1001', 'admin', 'https://t.me/c/999/5')).rejects.toThrow(/different group/);
+    await expect(tg.setTarget('status', '-1001', 'admin', 'nope')).rejects.toThrow(/Copy Link/);
+    await tg.setTarget('status', '-1001', 'admin', '33288');
+    await tg.publish('status', [{ title: 'Server status' }]);
+    expect(t.calls.filter((c) => c.method === 'sendMessage').at(-1)!.body).toMatchObject({ chat_id: '-1001', message_thread_id: 33288 });
+    expect(tg.view().targets.status).toMatchObject({ threadId: 33288 });
   });
 });

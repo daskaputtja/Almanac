@@ -11,6 +11,8 @@ const TOKEN_PATTERN = /^\d{5,15}:[A-Za-z0-9_-]{30,60}$/;
 
 interface Target {
   chatId: string | null;
+  /** A topic in a group with topics (its message_thread_id), or null for the main chat. */
+  threadId: number | null;
   messageId: number | null;
   lastUpdatedAt: string | null;
   lastError: string | null;
@@ -26,7 +28,19 @@ interface Stored {
 
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-const emptyTarget = (): Target => ({ chatId: null, messageId: null, lastUpdatedAt: null, lastError: null });
+const emptyTarget = (): Target => ({ chatId: null, threadId: null, messageId: null, lastUpdatedAt: null, lastError: null });
+
+/**
+ * Where a Telegram link points: "https://t.me/c/1234567890/33288" is topic 33288 in
+ * the group -1001234567890 (a message link adds the message: …/33288/40000). A bare
+ * number is taken as the topic.
+ */
+export function parseTopicLink(input: string): { chatId: string | null; threadId: number } | null {
+  const text = input.trim();
+  if (/^\d+$/.test(text)) return { chatId: null, threadId: Number(text) };
+  const m = text.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me)\/c\/(\d+)\/(\d+)(?:\/\d+)?\/?(?:\?.*)?$/i);
+  return m ? { chatId: `-100${m[1]}`, threadId: Number(m[2]) } : null;
+}
 
 export class TelegramError extends Error {
   constructor(
@@ -73,7 +87,7 @@ export class TelegramService {
   view(): TelegramSettings {
     const s = this.stored();
     const title = (id: string | null) => s.chats.find((c) => c.id === id)?.title ?? null;
-    const target = (t: Target) => ({ chatId: t.chatId, chatTitle: title(t.chatId), lastUpdatedAt: t.lastUpdatedAt, lastError: t.lastError });
+    const target = (t: Target) => ({ chatId: t.chatId, chatTitle: title(t.chatId), threadId: t.threadId, lastUpdatedAt: t.lastUpdatedAt, lastError: t.lastError });
     return {
       tokenSet: Boolean(s.token),
       botUsername: s.botUsername,
@@ -134,10 +148,17 @@ export class TelegramService {
   }
 
   /** Choose where a board goes (null: not to Telegram), and publish it there now. */
-  async setTarget(board: TelegramBoard, chatId: string | null, by: string): Promise<TelegramSettings> {
+  async setTarget(board: TelegramBoard, chatId: string | null, by: string, topic?: string | null): Promise<TelegramSettings> {
     const s = this.stored();
     if (chatId !== null && !s.chats.some((c) => c.id === chatId)) throw new NotifyError('Choose one of the groups the bot is in.');
-    if (s.targets[board].chatId !== chatId) s.targets[board] = { ...emptyTarget(), chatId };
+    let threadId = topic === undefined ? s.targets[board].threadId : null;
+    if (topic) {
+      const parsed = parseTopicLink(topic);
+      if (!parsed) throw new NotifyError('Paste the topic’s link (in Telegram: open the topic, then Copy Link), like https://t.me/c/1234567890/33288.');
+      if (parsed.chatId && chatId && parsed.chatId !== chatId) throw new NotifyError('That topic is in a different group from the one chosen.');
+      threadId = parsed.threadId;
+    }
+    if (s.targets[board].chatId !== chatId || s.targets[board].threadId !== threadId) s.targets[board] = { ...emptyTarget(), chatId, threadId };
     this.save(s, by);
     if (chatId) await this.onTargetChanged?.(board);
     return this.view();
@@ -182,13 +203,13 @@ export class TelegramService {
       }
     }
     try {
-      const sent = await this.call<{ message_id: number }>(token, 'sendMessage', { chat_id: t.chatId, text, disable_notification: true, ...opts });
+      const sent = await this.call<{ message_id: number }>(token, 'sendMessage', { chat_id: t.chatId, text, disable_notification: true, ...(t.threadId ? { message_thread_id: t.threadId } : {}), ...opts });
       return sent.message_id;
     } catch (err) {
       // A group that became a supergroup has a new ID.
       if (err instanceof TelegramError && err.migrateTo) {
         t.chatId = err.migrateTo;
-        const sent = await this.call<{ message_id: number }>(token, 'sendMessage', { chat_id: t.chatId, text, disable_notification: true, ...opts });
+        const sent = await this.call<{ message_id: number }>(token, 'sendMessage', { chat_id: t.chatId, text, disable_notification: true, ...(t.threadId ? { message_thread_id: t.threadId } : {}), ...opts });
         return sent.message_id;
       }
       throw err;
@@ -215,7 +236,11 @@ export class TelegramService {
       return this.call<T>(token, method, body, 1);
     }
     const migrate = json?.parameters?.migrate_to_chat_id;
-    const friendly = /bot was kicked|chat not found|not a member|have no rights|not enough rights/i.test(description)
+    const friendly = /topic_closed|TOPIC_CLOSED/i.test(description)
+      ? 'That topic is closed, so only admins can post in it. Make the bot an admin of the group with “Manage topics”.'
+      : /thread not found|TOPIC_DELETED|message thread not found/i.test(description)
+        ? 'Telegram can’t find that topic. Copy its link again (open the topic, then Copy Link).'
+        : /bot was kicked|chat not found|not a member|have no rights|not enough rights/i.test(description)
       ? `The bot can’t post there (${description}). Add it to the group again, or make it an admin of the channel.`
       : `Telegram: ${description}`;
     throw new TelegramError(friendly, description, migrate ? String(migrate) : null);

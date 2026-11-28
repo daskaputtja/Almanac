@@ -109,6 +109,8 @@ export interface TelegramChat {
 export interface TelegramTargetView {
   chatId: string | null;
   chatTitle: string | null;
+  /** The topic, in a group with topics; null for the main chat. */
+  threadId: number | null;
   lastUpdatedAt: string | null;
   lastError: string | null;
 }

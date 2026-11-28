@@ -556,7 +556,8 @@ export function createApp(
     const body = await jsonBody(c);
     if (body.board !== 'library' && body.board !== 'status') return c.json({ error: 'Choose a board.' }, 400);
     const chatId = typeof body.chatId === 'string' && body.chatId ? body.chatId : null;
-    return c.json(await telegram.setTarget(body.board, chatId, c.get('session').user.username));
+    const topic = body.topic === null || body.topic === '' ? null : typeof body.topic === 'string' ? body.topic : undefined;
+    return c.json(await telegram.setTarget(body.board, chatId, c.get('session').user.username, topic));
   });
   app.post('/api/notifications/staff', notifications, async (c) => {
     const body = await jsonBody(c);

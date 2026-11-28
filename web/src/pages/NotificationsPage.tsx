@@ -135,33 +135,9 @@ function TelegramCard() {
               ? `It’s in ${settings.chats.length} ${settings.chats.length === 1 ? 'group or channel' : 'groups and channels'}.`
               : 'It hasn’t seen any groups yet: add it to one, send a message there, then look again.'}
           </p>
-          {TELEGRAM_BOARDS.map(({ board, label, detail }) => {
-            const t = settings.targets[board];
-            return (
-              <label key={board} className="block text-sm">
-                <span className="font-medium">{label}</span>
-                <span className="block text-xs text-ink-faint">{detail}</span>
-                <select
-                  value={t.chatId ?? ''}
-                  disabled={busy}
-                  onChange={(e) => void act(() => api<TelegramSettings>('/api/notifications/telegram/target', { method: 'POST', body: { board, chatId: e.target.value || null } }), e.target.value ? 'Posted.' : 'Saved.')}
-                  className={`${input} mt-1 w-full`}
-                >
-                  <option value="">Not on Telegram</option>
-                  {settings.chats.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title} ({c.type === 'channel' ? 'channel' : 'group'})
-                    </option>
-                  ))}
-                </select>
-                {t.lastError ? (
-                  <span className="mt-1 block text-xs text-red-200">{t.lastError}</span>
-                ) : t.lastUpdatedAt ? (
-                  <span className="mt-1 block text-xs text-ink-faint">Last updated {formatWhen(t.lastUpdatedAt)}</span>
-                ) : null}
-              </label>
-            );
-          })}
+          {TELEGRAM_BOARDS.map(({ board, label, detail }) => (
+            <TelegramTargetRow key={board} board={board} label={label} detail={detail} settings={settings} busy={busy} act={act} />
+          ))}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={busy} className={secondary} onClick={() => void act(() => api<TelegramSettings>('/api/notifications/telegram/chats', { method: 'POST' }))}>
               Look for groups again
@@ -181,6 +157,68 @@ function TelegramCard() {
       )}
       {message && <p className={`mt-2 text-sm ${message.ok ? 'text-ink-muted' : 'text-red-200'}`}>{message.text}</p>}
     </section>
+  );
+}
+
+function TelegramTargetRow({
+  board,
+  label,
+  detail,
+  settings,
+  busy,
+  act,
+}: {
+  board: TelegramBoard;
+  label: string;
+  detail: string;
+  settings: TelegramSettings;
+  busy: boolean;
+  act: (fn: () => Promise<TelegramSettings>, done?: string) => Promise<void>;
+}) {
+  const t = settings.targets[board];
+  const [topic, setTopic] = useState(t.threadId ? String(t.threadId) : '');
+  const save = (chatId: string | null, topicValue: string) =>
+    act(() => api<TelegramSettings>('/api/notifications/telegram/target', { method: 'POST', body: { board, chatId, topic: topicValue.trim() || null } }), chatId ? 'Posted.' : 'Saved.');
+  return (
+    <div className="space-y-2 text-sm">
+      <label className="block">
+        <span className="font-medium">{label}</span>
+        <span className="block text-xs text-ink-faint">{detail}</span>
+        <select value={t.chatId ?? ''} disabled={busy} onChange={(e) => void save(e.target.value || null, topic)} className={`${input} mt-1 w-full`}>
+          <option value="">Not on Telegram</option>
+          {settings.chats.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.title} ({c.type === 'channel' ? 'channel' : 'group'})
+            </option>
+          ))}
+        </select>
+      </label>
+      {t.chatId && (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save(t.chatId, topic);
+          }}
+        >
+          <label className="min-w-0 flex-1 basis-64">
+            <span className="text-xs text-ink-muted">Topic (for a group with topics; leave empty for the main chat)</span>
+            <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="https://t.me/c/1234567890/33288" className={`${input} mt-1 w-full`} />
+          </label>
+          <button type="submit" disabled={busy} className={secondary}>
+            {t.threadId ? 'Change topic' : 'Use this topic'}
+          </button>
+        </form>
+      )}
+      {t.lastError ? (
+        <p className="text-xs text-red-200">{t.lastError}</p>
+      ) : t.lastUpdatedAt ? (
+        <p className="text-xs text-ink-faint">
+          Last updated {formatWhen(t.lastUpdatedAt)}
+          {t.threadId ? ` in topic ${t.threadId}` : ''}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
